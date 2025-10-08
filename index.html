@@ -137,7 +137,7 @@
     const errorBar = document.getElementById('errorBar');
     const btn = document.getElementById('loginBtn');
 
-    errorBar.style.display = "none"; // Hide the last error message
+    errorBar.style.display = "none"; // Hide previous error
 
     if (!username || !password) {
       errorBar.textContent = "Please enter both username and password.";
@@ -150,35 +150,23 @@
     btn.textContent = "Logging in...";
 
     try {
-      // === Real backend login interface ===
       const res = await fetch("https://b7t3adfkvk.execute-api.us-east-1.amazonaws.com/dev/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-      Username: username,
-      Password: password
-    })
-  });
-
-      // If the response is not 200
-      if (!res.ok) {
-        throw new Error(`Server error: ${res.status}`);
-      }
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Username: username, Password: password })
+      });
 
       const data = await res.json();
       console.log("[Login] API response:", data);
 
-      // === Login successful ===
-      if (data.success) {
-        // Save user roles and usernames
-        localStorage.setItem("userRole", data.role || "user");
+      if (res.ok && data.success) {
+        // Save user roles and username
+        localStorage.setItem("userRole", data.Role || "user");
         localStorage.setItem("username", username);
 
-        // Jump to the Dashboard (index.html)
+        // Redirect to dashboard
         window.location.href = "Dashboard.html";
-      } 
-      // === Login Failed ===
-      else {
+      } else {
         errorBar.textContent = data.message || "Invalid username or password.";
         errorBar.style.display = "block";
         btn.disabled = false;
@@ -193,10 +181,7 @@
       btn.textContent = "Login";
     }
   }
-</script>
+  </script>
 
 </body>
 </html>
-
-
-

@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Setting | Power Amigo</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* --- Basic layout to match Dashboard/Reports --- */
+    body { font-family: Arial; margin: 0; display: flex; }
+    header {
+      background: rgba(255, 255, 255, 0.9);
+      position: fixed; top: 0; width: 100%; z-index: 1000;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .nav-container { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; max-width: 1200px; margin: auto; }
+    .nav-container a { color: #2a9d8f; font-weight: bold; margin-left: 20px; text-decoration: none; font-size: 18px; }
+    .nav-container a:hover { text-decoration: underline; }
+    .nav-right { display: flex; align-items: center; }
+    .search-icon { cursor: pointer; font-size: 20px; color: #2a9d8f; margin-left: 15px; }
+
+    .search-overlay {
+      display: none; position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      width: 60%; background: white; padding: 15px; border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 2000;
+    }
+    .search-container { display: flex; align-items: center; gap: 10px; }
+    .search-container input { padding: 10px; font-size: 16px; width: 100%; border: 1px solid #ccc; border-radius: 4px; }
+    .search-container button { padding: 10px 20px; background: #e76f51; color: white; border: none; border-radius: 4px; cursor: pointer; }
+
+    .sidebar { width: 200px; background: #2a9d8f; color: white; height: 100vh; padding-top: 80px; position: fixed; top: 0; left: 0; }
+    .sidebar a { display: block; padding: 12px 20px; color: white; text-decoration: none; font-weight: bold; font-size: 16px; }
+    .sidebar a:hover { background: #248f7d; }
+
+    .main-content { margin-left: 200px; padding: 100px 40px; flex: 1; max-width: 1200px; }
+
+    .controls-row { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 24px; }
+    .sensor-dropdown { position: relative; }
+    .sensor-toggle-btn {
+      background-color: #2a9d8f; color: white; border: none;
+      padding: 10px 20px; border-radius: 20px; font-size: 16px;
+      cursor: pointer; transition: background-color 0.3s;
+    }
+    .sensor-toggle-btn[disabled] { opacity: 0.6; cursor: not-allowed; }
+    .sensor-toggle-btn:hover { background-color: #248f7d; }
+    .dropdown-menu {
+      position: absolute; top: 110%; left: 0; background-color: white;
+      border: 1px solid #ccc; border-radius: 8px; width: 200px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.15); z-index: 1000; display: none;
+    }
+    .dropdown-menu div { padding: 10px; cursor: pointer; }
+    .dropdown-menu div:hover { background-color: #f2f2f2; }
+
+    h1, h2, h3 { color: #2a9d8f; }
+
+    .card { background: #f9f9f9; padding: 20px; border-radius: 10px; box-shadow: 0 1px 5px rgba(0,0,0,0.1); }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(200px, 1fr)); gap: 16px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 16px; }
+    .row { display: flex; gap: 20px; align-items: center; }
+    label { font-size: 15px; color: #333; min-width: 90px; text-align: right;}
+    input[type="number"], input[type="date"] {
+      padding: 8px 10px; border: 1px solid #2a9d8f; border-radius: 6px; width: 140px; margin-right: 10px; margin-bottom: 10px;
+    }
+    button.primary { background: #2a9d8f; color: #fff; border: none; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
+    button.secondary { background: #e76f51; color: #fff; border: none; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border-bottom: 1px solid #e6e6e6; text-align: left; padding: 10px; font-size: 14px; }
+    tr.alert-row { background: #fff3f3; }
+    .muted { color: #666; font-size: 14px; line-height: 1.5; margin-top: 4px;}
+    .hint { color: #999; font-size: 12px; }
+    .section { margin-bottom: 28px; }
+	/* ---- Highlight severe alerts ---- */
+    tr.alert-row.severe { background-color: #ffcccc; font-weight: bold; }
+
+    /* ---- Floating alert banner ---- */
+  #alertBanner {
+  display: none;
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #ff5959;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  font-size: 16px;
+  font-weight: bold;
+  z-index: 3000;
+}
+    .nav-right button.secondary {
+  background: #e76f51;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.nav-right button.secondary:hover {
+  background: #cf5c3e;
+}
+
+ 
+.main-content .section.card {
+  max-width: 1100px;           
+  margin: 40px auto;           
+  padding: 30px 40px;          
+  background: #f9f9f9;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+
+    
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="nav-container">
+      <div><img src="images/logo.png" alt="Power Amigo Logo" height="40"/></div>
+      <div class="nav-right">
+        <a href="Dashboard.html">Home</a>
+        <a href="#">About Us</a>
+        <a href="#">Contact Us</a>
+        <a href="Dashboard.html">View Data</a>
+        <span class="search-icon" onclick="toggleSearch()">🔍</span>
+        <button class="secondary" onclick="logout()" style="margin-left: 20px;">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Search overlay -->
+  <div id="searchOverlay" class="search-overlay">
+    <div class="search-container">
+      <input type="text" placeholder="Search ..." />
+      <button>SEARCH</button>
+    </div>
+  </div>
+  <div id="alertBanner">Alert detected!</div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <a href="Dashboard.html">Dashboard</a>
+    <a href="Reports.html">Reports</a>
+    <a href="Setting.html">Setting</a>
+    <a href="Dashboard.html">Home</a>
+  </div>
+
+  <!-- Main -->
+  <div class="main-content">
+    <h1>Setting</h1>
+
+    <!-- Top selectors -->
+    <div class="controls-row">
+      <div class="sensor-dropdown">
+        <button id="btnInstall" class="sensor-toggle-btn" onclick="toggleInstallMenu()">Select Installation ▾</button>
+        <div id="installDropdown" class="dropdown-menu"></div>
+      </div>
+
+      <div class="sensor-dropdown">
+        <button id="btnSensor" class="sensor-toggle-btn" onclick="toggleSensorMenu()" disabled>Select Sensor ▾</button>
+        <div id="sensorDropdown" class="dropdown-menu"></div>
+      </div>
+
+      <div class="row">
+        <label for="datePicker"><strong>Select Day:</strong></label>
+        <input type="date" id="datePicker" />
+        <button class="primary" onclick="setToday()">Today</button>
+        <button class="primary" onclick="setYesterday()">Yesterday</button>
+      </div>
+    </div>
+
+    <!-- Thresholds per Installation -->
+    <div class="section card">
+      <h2>Current Thresholds (per Installation)</h2>
+      <p class="muted">These thresholds apply only to the currently selected Installation.</p>
+      <div class="grid-3">
+        <div>
+          <h3>Current A</h3>
+          <div class="row"><label>Min</label><input id="IA_min" type="number" step="0.01" /></div>
+          <div class="row"><label>Max</label><input id="IA_max" type="number" step="0.01" /></div>
+        </div>
+        <div>
+          <h3>Current B</h3>
+          <div class="row"><label>Min</label><input id="IB_min" type="number" step="0.01" /></div>
+          <div class="row"><label>Max</label><input id="IB_max" type="number" step="0.01" /></div>
+        </div>
+        <div>
+          <h3>Current C</h3>
+          <div class="row"><label>Min</label><input id="IC_min" type="number" step="0.01" /></div>
+          <div class="row"><label>Max</label><input id="IC_max" type="number" step="0.01" /></div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <button class="primary" onclick="saveThresholds()">Save Thresholds</button>
+        <span id="saveMsg" class="hint"></span>
+      </div>
+    </div>
+
+    <!-- Alert Monitor comes first -->
+    <div class="section card">
+      <h2>Alert Monitor</h2>
+      <div class="grid-2">
+        <div>
+          <p class="muted">Scan selected day for out-of-range currents based on thresholds above.</p>
+          <div class="row">
+            <button class="secondary" onclick="scanDay()">Scan Day</button>
+            <button id="btnAuto" class="secondary" onclick="toggleAutoScan()">Start Auto Scan (10s)</button>
+          </div>
+        </div>
+        <div>
+          <p class="muted">Export alert results for archiving.</p>
+          <div class="row">
+            <button class="primary" onclick="exportAlertsCSV()">Export Alerts CSV</button>
+          </div>
+        </div>
+      </div>
+
+      <table id="alertsTable">
+        <thead>
+          <tr>
+            <th>Date</th><th>Time Range</th><th>Installation</th><th>Sensor</th><th>Channel(s)</th><th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="6" class="muted">No alerts yet. Click "Scan Day".</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- User Management follows after Alert -->
+    <div class="section card" id="userManagement">
+      <h2>User Management</h2>
+      <p class="muted">Manage system users, roles, and account status.</p>
+
+      <table id="userTable">
+        <thead>
+          <tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr>
+        </thead>
+        <tbody id="userTableBody">
+          <tr><td colspan="5">Loading users...</td></tr>
+        </tbody>
+      </table>
+
+      <div class="row" style="margin-top:20px;">
+        <input id="newUserName" placeholder="Username" />
+        <input id="newUserEmail" placeholder="Email" />
+        <select id="newUserRole">
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button class="primary" onclick="addUser()">Add User</button>
+      </div>
+    </div>
+  </div> <!-- proper close main-content -->
+</body>
+</html>
+
+  <script>
+  
+    function logout() {
+  if (confirm("Are you sure you want to log out?")) {
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("username");
+    alert("You have been logged out.");
+    window.location.href = "login.html";
+  }
+}
+
+    // === ACCESS CONTROL: Admin-only page ===
+window.addEventListener("load", () => {
+  const role = localStorage.getItem("userRole");
+  console.log("[Auth] Checking user role:", role);
+
+  if (!role) {
+    alert("Please log in first.");
+    window.location.href = "login.html";
+    return;
+  }
+
+  if (role !== "admin") {
+    alert("Access denied. Only admin can open the Setting page.");
+    window.location.href = "index.html";
+    return;
+  }
+
+  console.log("[Auth] Access granted: Admin verified.");
+});
+
+    /* ----------- Constants & State ----------- */
+    const API_BASE = "https://40btd9hsk0.execute-api.us-east-1.amazonaws.com/sensors";
+    const LS_KEY = "POWER_AMIGO_THRESHOLDS_V2"; // store per-installation
+    let thresholdsByInstall = {};
+    let currentInstallation = null;
+    let currentSensor = null;
+    let autoScanTimer = null;
+    let foundAlerts = []; // last scan results
+
+    /* ----------- Utilities ----------- */
+    function toggleSearch(){
+      const o=document.getElementById("searchOverlay");
+      o.style.display=(o.style.display==="block")?"none":"block";
+    }
+
+    function toggleInstallMenu(){
+      console.log("[setting] toggleInstallMenu()");
+      const m=document.getElementById('installDropdown');
+      m.style.display=(m.style.display==='block')?'none':'block';
+    }
+    function toggleSensorMenu(){
+      console.log("[setting] toggleSensorMenu()");
+      const m=document.getElementById('sensorDropdown');
+      m.style.display=(m.style.display==='block')?'none':'block';
+    }
+    document.addEventListener('click', (e)=>{
+      const im=document.getElementById('installDropdown');
+      const sd=document.getElementById('sensorDropdown');
+      const buttons=document.querySelectorAll('.sensor-toggle-btn');
+      const insideBtn=[...buttons].some(b=>b.contains(e.target));
+      if(im && !im.contains(e.target) && !insideBtn) im.style.display='none';
+      if(sd && !sd.contains(e.target) && !insideBtn) sd.style.display='none';
+    });
+
+    function getLocalDateString(dateObj=new Date()){ return dateObj.toISOString().slice(0,10); }
+    function setToday(){
+      const d=getLocalDateString();
+      document.getElementById('datePicker').value=d;
+      console.log("[setting] setToday:", d);
+    }
+    function setYesterday(){
+      const y=new Date(); y.setDate(y.getDate()-1);
+      const d=getLocalDateString(y);
+      document.getElementById('datePicker').value=d;
+      console.log("[setting] setYesterday:", d);
+    }
+
+    function loadThresholdsFromLS(){
+      try{
+        thresholdsByInstall = JSON.parse(localStorage.getItem(LS_KEY)||"{}");
+        console.log("[setting] thresholds loaded:", thresholdsByInstall);
+      }catch(e){
+        console.warn("[setting] failed to parse thresholds from LS:", e);
+        thresholdsByInstall = {};
+      }
+    }
+    function saveThresholdsToLS(){
+      localStorage.setItem(LS_KEY, JSON.stringify(thresholdsByInstall));
+      console.log("[setting] thresholds saved to LS:", thresholdsByInstall);
+    }
+
+    /* ----------- Installation & Sensor ----------- */
+    async function loadInstallations(){
+      try{
+        console.log("[setting] fetching installations:", API_BASE);
+        const res = await fetch(API_BASE);
+        console.log("[setting] installations status:", res.status);
+        const json = await res.json();
+        console.log("[setting] installations json:", json);
+
+        if(!json.items || json.items.length===0){
+          console.warn("[setting] empty items; cannot build installations");
+          return;
+        }
+        const installs = [...new Set(json.items.map(r=>r.Installation || "Unknown Installation"))];
+        console.log("[setting] found installations:", installs);
+
+        const dd = document.getElementById('installDropdown');
+        dd.innerHTML = "";
+        installs.forEach(name=>{
+          const div=document.createElement('div');
+          div.textContent=name;
+          div.onclick=()=>selectInstallation(name);
+          dd.appendChild(div);
+        });
+
+        // auto select first
+        if(installs.length>0) selectInstallation(installs[0]);
+      }catch(err){
+        console.error("[setting] loadInstallations failed:", err);
+      }
+    }
+
+    async function selectInstallation(installation){
+      console.log("[setting] selectInstallation:", installation);
+      currentInstallation = installation;
+      document.getElementById('btnInstall').textContent = installation + " Ã¢â€“Â¾";
+      document.getElementById('installDropdown').style.display='none';
+
+      // enable sensor button
+      document.getElementById('btnSensor').disabled = false;
+
+      // load its sensors
+      await loadSensorsForInstallation(installation);
+
+      // load thresholds for this installation
+      applyThresholdsToForm();
+    }
+
+    async function loadSensorsForInstallation(installation){
+      try{
+        console.log("[setting] loadSensorsForInstallation:", installation);
+        const res = await fetch(API_BASE);
+        console.log("[setting] sensors status:", res.status);
+        const json = await res.json();
+        console.log("[setting] sensors json:", json);
+
+        if(!json.items || json.items.length===0){
+          console.warn("[setting] empty items; cannot build sensors");
+          return;
+        }
+        const sensors = [...new Set(json.items
+          .filter(r => (r.Installation || "Unknown Installation") === installation)
+          .map(r => r.Sensor_id))];
+        console.log(`[setting] sensors for ${installation}:`, sensors);
+
+        const dd = document.getElementById('sensorDropdown');
+        dd.innerHTML = "";
+        sensors.forEach(id=>{
+          const div=document.createElement('div');
+          div.textContent=id;
+          div.onclick=()=>selectSensor(id);
+          dd.appendChild(div);
+        });
+
+        if(sensors.length>0) selectSensor(sensors[0]);
+      }catch(err){
+        console.error("[setting] loadSensorsForInstallation failed:", err);
+      }
+    }
+
+    function selectSensor(sensor){
+      console.log("[setting] selectSensor:", sensor);
+      currentSensor = sensor;
+      document.getElementById('btnSensor').textContent = sensor + " Ã¢â€“Â¾";
+      document.getElementById('sensorDropdown').style.display='none';
+    }
+
+    /* ----------- Threshold form logic (per installation) ----------- */
+    function applyThresholdsToForm(){
+      const t = thresholdsByInstall[currentInstallation] || {};
+      console.log("[setting] applyThresholdsToForm for", currentInstallation, t);
+
+      document.getElementById('IA_min').value = (t.IA?.min ?? "");
+      document.getElementById('IA_max').value = (t.IA?.max ?? "");
+      document.getElementById('IB_min').value = (t.IB?.min ?? "");
+      document.getElementById('IB_max').value = (t.IB?.max ?? "");
+      document.getElementById('IC_min').value = (t.IC?.min ?? "");
+      document.getElementById('IC_max').value = (t.IC?.max ?? "");
+    }
+
+    function readThresholdsFromForm(){
+      const iaMin = Number(document.getElementById('IA_min').value);
+      const iaMax = Number(document.getElementById('IA_max').value);
+      const ibMin = Number(document.getElementById('IB_min').value);
+      const ibMax = Number(document.getElementById('IB_max').value);
+      const icMin = Number(document.getElementById('IC_min').value);
+      const icMax = Number(document.getElementById('IC_max').value);
+
+      const ok = (a,b)=>!(Number.isNaN(a) || Number.isNaN(b) || a>b);
+      if(!ok(iaMin, iaMax) || !ok(ibMin, ibMax) || !ok(icMin, icMax)){
+        throw new Error("Invalid thresholds: min must be <= max, and all fields required.");
+      }
+
+      return {
+        IA: { min: iaMin, max: iaMax },
+        IB: { min: ibMin, max: ibMax },
+        IC: { min: icMin, max: icMax }
+      };
+    }
+
+    function saveThresholds(){
+      try{
+        if(!currentInstallation){ alert("Please select Installation first."); return; }
+        console.log("[setting] saveThresholds for", currentInstallation);
+        const t = readThresholdsFromForm();
+        thresholdsByInstall[currentInstallation] = t;
+        saveThresholdsToLS();
+        document.getElementById('saveMsg').textContent = "Saved Ã¢Å“â€œ";
+        setTimeout(()=>{document.getElementById('saveMsg').textContent="";}, 1500);
+      }catch(err){
+        console.error("[setting] saveThresholds error:", err);
+        alert(err.message || "Failed to save thresholds.");
+      }
+    }
+
+    /* ----------- Alert scanning ----------- */
+    function getSelectedDate(){
+      return document.getElementById('datePicker').value || getLocalDateString();
+    }
+
+    function withinRange(val, min, max){
+      if(Number.isNaN(val)) return false;
+      return val >= min && val <= max;
+    }
+
+    function computeMedianStep(timestamps){
+      if(timestamps.length<2) return 300000; // 5 min default
+      const deltas=[];
+      for(let i=1;i<timestamps.length;i++){
+        deltas.push(timestamps[i]-timestamps[i-1]);
+      }
+      deltas.sort((a,b)=>a-b);
+      const mid=Math.floor(deltas.length/2);
+      return deltas.length%2?deltas[mid]:((deltas[mid-1]+deltas[mid])/2);
+    }
+
+    function groupAlertIntervals(points){
+      // points: [{ts: Date, channels: ['IA', ...], values: {IA:x,...}}]
+      if(points.length===0) return [];
+      const tsNums = points.map(p=>p.ts.getTime());
+      const step = computeMedianStep(tsNums);
+      const tolerance = Math.max(2*1000, Math.floor(step*1.5)); // allow some jitter
+      console.log("[setting] grouping intervals. median step(ms):", step, "tolerance:", tolerance);
+
+      const res=[];
+      let cur = { start: points[0].ts, end: points[0].ts, channels: new Set(points[0].channels), samples:[points[0]] };
+
+      for(let i=1;i<points.length;i++){
+        const p=points[i];
+        const gap = p.ts.getTime()-cur.end.getTime();
+        const sameChannels = JSON.stringify([...cur.channels].sort())===JSON.stringify([...new Set(p.channels)].sort());
+        if(gap<=tolerance && sameChannels){
+          cur.end = p.ts;
+          cur.samples.push(p);
+        }else{
+          res.push(cur);
+          cur = { start: p.ts, end: p.ts, channels: new Set(p.channels), samples:[p] };
+        }
+      }
+      res.push(cur);
+
+      // map to final shape
+      return res.map(seg=>{
+        const chs=[...seg.channels].join(",");
+        // aggregate detail: min/max over segment by channel
+        const agg={};
+        for(const p of seg.samples){
+          for(const k of Object.keys(p.values)){
+            if(p.channels.includes(k)){
+              if(!agg[k]) agg[k]={min:p.values[k], max:p.values[k]};
+              agg[k].min = Math.min(agg[k].min, p.values[k]);
+              agg[k].max = Math.max(agg[k].max, p.values[k]);
+            }
+          }
+        }
+        return {
+          start: seg.start,
+          end: seg.end,
+          channels: chs,
+          detail: Object.entries(agg).map(([k,v])=>`${k}: ${v.min.toFixed(2)} ~ ${v.max.toFixed(2)}`).join("; ")
+        };
+      });
+    }
+
+    async function scanDay(){
+      try{
+        if(!currentInstallation){ alert("Please select Installation first."); return; }
+        if(!currentSensor){ alert("Please select Sensor first."); return; }
+
+        const t = thresholdsByInstall[currentInstallation];
+        if(!t){ alert("Please set thresholds for current Installation first."); return; }
+
+        const dateStr = getSelectedDate();
+        console.log("[setting] scanDay installation:", currentInstallation, "sensor:", currentSensor, "date:", dateStr, "thresholds:", t);
+
+        const res = await fetch(API_BASE);
+        console.log("[setting] scan fetch status:", res.status);
+        const json = await res.json();
+        console.log("[setting] scan json:", json);
+
+        if(!json.items || json.items.length===0){
+          alert("No data returned from API.");
+          return;
+        }
+
+        // filter by installation (if present) + sensor + date
+        const start = new Date(dateStr+"T00:00:00");
+        const end = new Date(dateStr+"T23:59:59");
+        const filtered = json.items.filter(r=>{
+          const okInstall = (r.Installation || "Unknown Installation") === currentInstallation;
+          const okSensor  = r.Sensor_id === currentSensor;
+          const ts = new Date(r.timestamp*1000);
+          return okInstall && okSensor && ts>=start && ts<=end;
+        }).map(r=>({
+          ts: new Date(r.timestamp*1000),
+          IA: r.IA, IB: r.IB, IC: r.IC
+        })).sort((a,b)=>a.ts-b.ts);
+        console.log("[setting] filtered points:", filtered.length);
+
+        // build alert points
+        const alertsPoints=[];
+        for(const p of filtered){
+          const channels=[];
+          if(!withinRange(p.IA, t.IA.min, t.IA.max)) channels.push("IA");
+          if(!withinRange(p.IB, t.IB.min, t.IB.max)) channels.push("IB");
+          if(!withinRange(p.IC, t.IC.min, t.IC.max)) channels.push("IC");
+          if(channels.length){
+            alertsPoints.push({ ts:p.ts, channels, values:{IA:p.IA, IB:p.IB, IC:p.IC} });
+          }
+        }
+        console.log("[setting] raw alert points:", alertsPoints.length);
+
+        // group to intervals
+        const intervals = groupAlertIntervals(alertsPoints);
+        console.log("[setting] alert intervals:", intervals.length, intervals);
+
+        // render table
+        foundAlerts = intervals.map(seg=>({
+          date: dateStr,
+          range: `${seg.start.toTimeString().slice(0,8)} ~ ${seg.end.toTimeString().slice(0,8)}`,
+          installation: currentInstallation,
+          sensor: currentSensor,
+          channels: seg.channels,
+          detail: seg.detail
+        }));
+        renderAlertsTable();
+      }catch(err){
+        console.error("[setting] scanDay failed:", err);
+        alert("Scan failed, check console.");
+      }
+    }
+
+    function renderAlertsTable(){
+      const tbody = document.querySelector("#alertsTable tbody");
+      tbody.innerHTML = "";
+      if(foundAlerts.length===0){
+        const tr=document.createElement('tr');
+        const td=document.createElement('td');
+        td.colSpan=6; td.className="muted"; td.textContent="No alerts for this selection.";
+        tr.appendChild(td); tbody.appendChild(tr);
+        return;
+      }
+      for(const a of foundAlerts){
+        const tr=document.createElement('tr');
+        tr.className="alert-row";
+        tr.innerHTML = `
+          <td>${a.date}</td>
+          <td>${a.range}</td>
+          <td>${a.installation}</td>
+          <td>${a.sensor}</td>
+          <td>${a.channels}</td>
+          <td>${a.detail}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+	  highlightSevereRows();
+    }
+
+    function exportAlertsCSV(){
+      if(foundAlerts.length===0){ alert("No alerts to export."); return; }
+      console.log("[setting] exportAlertsCSV rows:", foundAlerts.length);
+      let csv="Date,Time Range,Installation,Sensor,Channels,Detail\n";
+      foundAlerts.forEach(a=>{
+        csv+=`${a.date},${a.range},${a.installation},${a.sensor},"${a.channels}","${a.detail}"\n`;
+      });
+      const blob=new Blob([csv],{type:'text/csv'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url; a.download=`alerts_${currentInstallation}_${currentSensor}_${getSelectedDate()}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function toggleAutoScan(){
+      const btn=document.getElementById('btnAuto');
+      if(autoScanTimer){
+        clearInterval(autoScanTimer);
+        autoScanTimer=null;
+        btn.textContent="Start Auto Scan (10s)";
+        console.log("[setting] auto-scan stopped");
+      }else{
+        console.log("[setting] auto-scan started (10s)");
+        btn.textContent="Stop Auto Scan";
+        autoScanTimer=setInterval(scanDay, 10000);
+      }
+    }
+
+    /* ----------- Bootstrapping ----------- */
+    function initDate(){
+      const input=document.getElementById('datePicker');
+      input.value = getLocalDateString();
+    }
+    function init(){
+      console.log("[setting] init()");
+      loadThresholdsFromLS();
+      initDate();
+      loadInstallations();
+    }
+	function showAlertBanner(message) {
+  const banner = document.getElementById("alertBanner");
+  banner.textContent = "âš ï¸ " + message;
+  banner.style.display = "block";
+  setTimeout(() => {
+    banner.style.display = "none";
+  }, 3000);
+}
+
+    function highlightSevereRows() {
+  const rows = document.querySelectorAll("#alertsTable tbody tr.alert-row");
+
+  // Get the threshold configuration of the current installation
+  const t = thresholdsByInstall[currentInstallation];
+  if (!t) {
+    console.warn("[setting] No thresholds found for", currentInstallation);
+    return;
+  }
+
+  rows.forEach(tr => {
+    const detailText = tr.querySelector("td:last-child").textContent;
+    const sensor = tr.children[3].textContent;
+    const channel = tr.children[4].textContent; // e.g., "IA,IB"
+
+    // Match the current value from the detail text
+    const match = detailText.match(/(\d+\.\d+) ~ (\d+\.\d+)/);
+    if (match) {
+      const minVal = parseFloat(match[1]);
+      const maxVal = parseFloat(match[2]);
+
+      // Select the corresponding maximum threshold according to the channel
+      let thresholdMax = 0;
+      if (channel.includes("IA")) thresholdMax = t.IA.max;
+      else if (channel.includes("IB")) thresholdMax = t.IB.max;
+      else if (channel.includes("IC")) thresholdMax = t.IC.max;
+
+      // Determine whether it exceeds 10% of the max threshold
+      const upperLimit = thresholdMax * 1.1;
+      if (maxVal > upperLimit) {
+        tr.classList.add("severe");
+        showAlertBanner(`${sensor} exceeded 110% of threshold (${channel})!`);
+        console.log(`[setting] Severe alert: ${channel} ${maxVal.toFixed(2)} > ${upperLimit.toFixed(2)}`);
+      }
+    }
+  });
+}
+
+
+    window.addEventListener('load', init);
+	
+	  const USER_API = "https://b7t3adfkvk.execute-api.us-east-1.amazonaws.com/dev/api/users";
+
+// === Load user list ===
+async function loadUsers() {
+  console.log("[UserMgmt] Fetching user list...");
+  try {
+    const res = await fetch(USER_API);
+    const users = await res.json();
+    console.log("[UserMgmt] Loaded users:", users);
+
+    const tbody = document.getElementById("userTableBody");
+    tbody.innerHTML = "";
+    users.forEach(u => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${u.username}</td>
+        <td>${u.email}</td>
+        <td>${u.role}</td>
+        <td>${u.status}</td>
+        <td>
+          <button class="secondary" onclick="deleteUser('${u.username}')">Delete</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    console.error("[UserMgmt] Failed to load users:", err);
+  }
+}
+
+// === Add new user ===
+async function addUser() {
+  const name = document.getElementById("newUserName").value.trim();
+  const email = document.getElementById("newUserEmail").value.trim();
+  const role = document.getElementById("newUserRole").value;
+
+  if (!name || !email) {
+    alert("Please fill in all fields.");
+    return;
+  }
+
+  try {
+    const res = await fetch(USER_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: name, email, role })
+    });
+    console.log("[UserMgmt] Added user:", name);
+    alert("User added!");
+    loadUsers();
+  } catch (err) {
+    console.error("[UserMgmt] Failed to add user:", err);
+  }
+}
+
+// === Delete user (updated version using username) ===
+async function deleteUser(username) {
+  if (!confirm(`Are you sure you want to delete user "${username}"?`)) return;
+
+  try {
+    const res = await fetch(`${USER_API}/${encodeURIComponent(username)}`, {
+      method: "DELETE"
+    });
+
+    if (res.ok) {
+      console.log("[UserMgmt] Deleted user:", username);
+      alert(`User "${username}" deleted successfully.`);
+      loadUsers(); // refresh user list
+    } else {
+      const msg = await res.text();
+      alert(`Failed to delete user: ${msg || res.statusText}`);
+    }
+  } catch (err) {
+    console.error("[UserMgmt] Failed to delete user:", err);
+    alert("An error occurred while deleting user.");
+  }
+}
+
+
+// Initialize loading of user list
+window.addEventListener("load", () => {
+  if (localStorage.getItem("userRole") === "admin") {
+    loadUsers();
+  }
+});
+
+  </script>
+</body>
+</html>
+
+

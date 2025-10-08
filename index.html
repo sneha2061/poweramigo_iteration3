@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login | Power Amigo</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #2a9d8f 0%, #e9f5f4 100%);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+      padding: 40px 50px;
+      width: 380px;
+      text-align: center;
+      animation: fadeIn 0.8s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-card img {
+      width: 160px;
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      color: #2a9d8f;
+      margin-bottom: 10px;
+      font-size: 26px;
+    }
+
+    p.subtitle {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.3s ease;
+    }
+
+    input:focus {
+      border-color: #2a9d8f;
+      box-shadow: 0 0 4px rgba(42, 157, 143, 0.4);
+    }
+
+    button {
+      width: 100%;
+      background: #2a9d8f;
+      color: #fff;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    button:hover {
+      background: #248f7d;
+    }
+
+    button:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    .footer {
+      margin-top: 20px;
+      color: #888;
+      font-size: 13px;
+    }
+
+    .footer a {
+      color: #2a9d8f;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Error message bar */
+    .error-bar {
+      display: none;
+      background-color: #ff5959;
+      color: white;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      font-weight: bold;
+      animation: fadeIn 0.4s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <img src="images/logo.png" alt="Power Amigo Logo" />
+    <h2>Welcome Back</h2>
+    <p class="subtitle">Sign in to access your dashboard</p>
+
+    <div id="errorBar" class="error-bar">Invalid username or password.</div>
+
+    <input type="text" id="username" placeholder="Username" />
+    <input type="password" id="password" placeholder="Password" />
+    <button id="loginBtn" onclick="login()">Login</button>
+
+    <div class="footer">
+      <p>Don't have an account? <a href="#">Contact admin</a></p>
+    </div>
+  </div>
+
+  <script>
+  async function login() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value.trim();
+    const errorBar = document.getElementById('errorBar');
+    const btn = document.getElementById('loginBtn');
+
+    errorBar.style.display = "none"; // Hide the last error message
+
+    if (!username || !password) {
+      errorBar.textContent = "Please enter both username and password.";
+      errorBar.style.display = "block";
+      return;
+    }
+
+    // Disable button and show loading state
+    btn.disabled = true;
+    btn.textContent = "Logging in...";
+
+    try {
+      // === Real backend login interface ===
+      const res = await fetch("https://b7t3adfkvk.execute-api.us-east-1.amazonaws.com/dev/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      // If the response is not 200
+      if (!res.ok) {
+        throw new Error(`Server error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      console.log("[Login] API response:", data);
+
+      // === Login successful ===
+      if (data.success) {
+        // Save user roles and usernames
+        localStorage.setItem("userRole", data.role || "user");
+        localStorage.setItem("username", username);
+
+        // Jump to the Dashboard (index.html)
+        window.location.href = "Dashboard.html";
+      } 
+      // === Login Failed ===
+      else {
+        errorBar.textContent = data.message || "Invalid username or password.";
+        errorBar.style.display = "block";
+        btn.disabled = false;
+        btn.textContent = "Login";
+      }
+
+    } catch (err) {
+      console.error("[Login] Error:", err);
+      errorBar.textContent = "Network error or server unreachable.";
+      errorBar.style.display = "block";
+      btn.disabled = false;
+      btn.textContent = "Login";
+    }
+  }
+</script>
+
+</body>
+</html>

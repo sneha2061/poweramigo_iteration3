@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Reports | Power Amigo</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    body { font-family: Arial; margin: 0; display: flex; line-height: 1.6; background: #fafafa; }
+    header { background: rgba(255,255,255,0.95); position: fixed; top: 0; width: 100%; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .nav-container { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; max-width: 1200px; margin: auto; }
+    .nav-container a { color: #2a9d8f; font-weight: bold; margin-left: 20px; text-decoration: none; font-size: 18px; }
+    .nav-container a:hover { text-decoration: underline; }
+    .nav-right { display: flex; align-items: center; }
+    .search-icon { cursor: pointer; font-size: 20px; color: #2a9d8f; margin-left: 15px; }
+
+    .search-overlay { display: none; position: fixed; top: 60px; left: 50%; transform: translateX(-50%); width: 60%; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 2000; }
+    .search-container { display: flex; align-items: center; gap: 10px; }
+    .search-container input { padding: 10px; font-size: 16px; width: 100%; border: 1px solid #ccc; border-radius: 4px; }
+    .search-container button { padding: 10px 20px; background: #e76f51; color: white; border: none; border-radius: 4px; cursor: pointer; }
+
+    .sidebar { width: 200px; background: #2a9d8f; color: white; height: 100vh; padding-top: 80px; position: fixed; top: 0; left: 0; }
+    .sidebar a { display: block; padding: 12px 20px; color: white; text-decoration: none; font-weight: bold; font-size: 16px; }
+    .sidebar a:hover { background: #248f7d; }
+
+    .main-content { margin-left: 200px; padding: 100px 40px; flex: 1; }
+    h1, h2, h3 { color: #2a9d8f; margin-bottom: 10px; }
+    p.section-desc { color: #444; margin-top: 0; margin-bottom: 25px; }
+
+    .sensor-controls { display: flex; gap: 15px; align-items: center; margin-bottom: 30px; }
+    .sensor-dropdown { position: relative; }
+    .sensor-toggle-btn { background-color: #2a9d8f; color: white; border: none; padding: 10px 20px; border-radius: 20px; font-size: 16px; cursor: pointer; }
+    .dropdown-menu { position: absolute; top: 110%; left: 0; background-color: white; border: 1px solid #ccc; border-radius: 8px; width: 160px; box-shadow: 0 2px 5px rgba(0,0,0,0.15); z-index: 1000; display: none; }
+    .dropdown-menu div { padding: 10px; cursor: pointer; }
+    .dropdown-menu div:hover { background-color: #f2f2f2; }
+
+    input[type="week"], input[type="month"] { padding: 8px 12px; border: 1px solid #2a9d8f; border-radius: 6px; }
+    .chart-row { display: flex; gap: 20px; align-items: stretch; margin-bottom: 30px; flex-wrap: wrap; }
+    .chart-col { flex: 1; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); min-width: 280px; }
+    canvas { width: 100% !important; height: 350px !important; }
+
+    .csv-controls { margin: 10px 0 40px 0; display: flex; gap: 10px; align-items: center; }
+    select, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #2a9d8f; background: white; font-size: 14px; }
+    button { background: #2a9d8f; color: white; cursor: pointer; }
+    .stats { margin: 10px 0 25px 0; font-size: 14px; color: #333; padding: 10px; background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .pdf-section { margin-top: 20px; }
+	button.secondary {
+  background: #e76f51;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+button.secondary:hover {
+  background: #d45f45;
+}
+
+  </style>
+</head>
+<body>
+  <!-- === Top Navigation === -->
+  <header>
+    <div class="nav-container">
+      <div><img src="images/logo.png" alt="Power Amigo Logo" height="40"/></div>
+      <div class="nav-right">
+        <a href="index.html">Home</a>
+        <a href="#">About Us</a>
+        <a href="#">Contact Us</a>
+        <a href="Dashboard.html">View Data</a>
+        <span class="search-icon" onclick="toggleSearch()">🔍</span>
+		<button class="secondary" onclick="logout()" style="margin-left: 20px;">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- === Sidebar === -->
+  <div class="sidebar">
+    <a href="Dashboard.html">Dashboard</a>
+    <a href="Reports.html">Reports</a>
+    <a href="Setting.html">Settings</a>
+    <a href="Dashboard.html">Home</a>
+  </div>
+
+  <!-- === Main Reports Content === -->
+  <div class="main-content">
+    <h1>Reports</h1>
+    <p class="section-desc">View summarized weekly and monthly sensor reports for currents A, B, and C. Choose a sensor and select a time range below to generate the charts.</p>
+
+    <div class="sensor-controls">
+
+      <!-- NEW: Installation dropdown (added without modifying existing) -->
+      <div class="sensor-dropdown">
+        <button class="sensor-toggle-btn" onclick="toggleInstallationMenu()">Select Installation ▾</button>
+        <div id="installationDropdown" class="dropdown-menu"></div>
+      </div>
+      <!-- END NEW BLOCK -->
+
+      <div class="sensor-dropdown">
+        <button class="sensor-toggle-btn" onclick="toggleSensorMenu()">Select Sensor ▾</button>
+        <div id="sensorDropdown" class="dropdown-menu"></div>
+      </div>
+      <label><strong>Select Week:</strong></label>
+      <input type="week" id="weekPicker" onchange="renderWeekReport()" />
+      <label><strong>Select Month:</strong></label>
+      <input type="month" id="monthPicker" onchange="renderMonthReport()" />
+    </div>
+
+    <!-- Weekly Report -->
+    <h2>Weekly Report</h2>
+    <div class="chart-row">
+      <div class="chart-col"><canvas id="weekLine"></canvas></div>
+      <div class="chart-col"><canvas id="weekPie"></canvas></div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-col"><canvas id="weekBar"></canvas></div>
+    </div>
+    <div class="stats" id="weekStats">Weekly stats will appear here.</div>
+    
+    <!-- Weekly Export Controls -->
+    <h3>Get the Weekly CSV and PDF</h3>
+    <div class="csv-controls">
+      <label for="weekCsvGran">CSV Granularity:</label>
+      <select id="weekCsvGran">
+         <option value="1440">Daily</option>
+         <option value="720">Half Day</option>
+         <option value="60">Hourly</option>
+         <option value="30">30 Minutes</option>
+       </select>
+      <button onclick="exportWeekCSV()">Export CSV</button>
+      <button onclick="exportWeekPDF()">Export PDF</button>
+    </div>
+
+    <!-- Monthly Report -->
+    <h2>Monthly Report</h2>
+    <div class="chart-row">
+      <div class="chart-col"><canvas id="monthLine"></canvas></div>
+      <div class="chart-col"><canvas id="monthPie"></canvas></div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-col"><canvas id="monthBar"></canvas></div>
+    </div>
+    <div class="stats" id="monthStats">Monthly stats will appear here.</div>
+    
+    <!-- Monthly Export Controls -->
+    <h3>Get the Monthly CSV and PDF</h3>
+    <div class="csv-controls">
+      <label for="monthCsvGran">CSV Granularity:</label>
+      <select id="monthCsvGran">
+         <option value="1440">Daily</option>
+         <option value="720">Half Day</option>
+         <option value="60">Hourly</option>
+         <option value="30">30 Minutes</option>
+       </select>
+      <button onclick="exportMonthCSV()">Export CSV</button>
+      <button onclick="exportMonthPDF()">Export PDF</button>
+    </div>
+  </div>
+
+<script>
+
+  function logout() {
+    // Clear the user login status (according to your front-end login implementation)
+    localStorage.removeItem('userRole');
+    // Jump back to the login page
+    window.location.href = 'Login.html';
+  }
+
+const API_BASE = "https://40btd9hsk0.execute-api.us-east-1.amazonaws.com/sensors";
+let currentSensor = null;
+let charts = {};
+let weekData = null;
+let monthData = null;
+
+function toggleSearch(){const o=document.getElementById("searchOverlay");o.style.display=(o.style.display==="block")?"none":"block";}
+function toggleSensorMenu(){const m=document.getElementById('sensorDropdown');m.style.display=(m.style.display==='block')?'none':'block';}
+document.addEventListener('click',e=>{const m=document.getElementById('sensorDropdown');const b=document.querySelector('.sensor-toggle-btn');if(!b.contains(e.target)&&!m.contains(e.target)){m.style.display='none';}});
+
+// Dynamic load cell
+async function loadSensors(){
+  try{
+    console.log("Starting to load sensor data...");
+    const res=await fetch(API_BASE);
+    const json=await res.json();
+    console.log("API response:", json);
+
+    if(!json.items || json.items.length === 0){
+      console.log("The data returned by the API is empty or does not have the items field");
+      alert("No sensors found from API.");
+      return;
+    }
+
+    const sensors=[...new Set(json.items.map(r=>r.Sensor_id))];
+    console.log("Sensors found:", sensors);
+    const dropdown=document.getElementById('sensorDropdown');
+    dropdown.innerHTML="";
+    sensors.forEach(id=>{
+      const div=document.createElement('div');
+      div.textContent=id;
+      div.onclick=()=>selectSensor(id);
+      dropdown.appendChild(div);
+    });
+    
+    // Automatically select the first sensor
+    if(sensors.length > 0){
+      selectSensor(sensors[0]);
+      document.querySelector('.sensor-toggle-btn').textContent = sensors[0] + ' ▾';
+    }
+  }catch(e){
+    console.error("Failed to load sensors",e);
+    alert("Error loading sensors, check console.");
+  }
+}
+
+function selectSensor(sensor){
+  console.log("Select Sensor:", sensor);
+  currentSensor=sensor;
+  
+  // Update button display text
+  document.querySelector('.sensor-toggle-btn').textContent = sensor + ' ▾';
+  
+  // Hide drop-down menu
+  document.getElementById('sensorDropdown').style.display = 'none';
+  
+  // Set the default time range
+  const now = new Date();
+  const currentWeek = getWeekString(now);
+  const currentMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  
+  document.getElementById('weekPicker').value = currentWeek;
+  document.getElementById('monthPicker').value = currentMonth;
+  
+  renderWeekReport();
+  renderMonthReport();
+}
+
+// Get the current week in string format (simplified version)
+function getWeekString(date) {
+  const year = date.getFullYear();
+  const startOfYear = new Date(year, 0, 1);
+  const dayOfYear = Math.floor((date - startOfYear) / (24 * 60 * 60 * 1000)) + 1;
+  const weekNumber = Math.ceil(dayOfYear / 7);
+  
+  return year + '-W' + String(weekNumber).padStart(2, '0');
+}
+
+// Pulling raw data
+async function fetchRawData(sensor, start, end){
+  try {
+    console.log(`Get Data - Sensor: ${sensor}, Start time: ${start}, End time: ${end}`);
+    console.log(`Time range: ${new Date(start*1000)} to ${new Date(end*1000)}`);
+    
+    const res=await fetch(API_BASE);
+    if(!res.ok) throw new Error("API error");
+    const json=await res.json();
+    console.log("Raw data returned by the API:", json);
+    console.log("Number of data items:", json.items ? json.items.length : 0);
+
+    const filtered = json.items.filter(r=>{
+      const ts=r.timestamp;
+      const match = r.Sensor_id===sensor && ts>=start && ts<=end;
+      if(match) {
+        console.log(`Matching data points:`, r);
+      }
+      return match;
+    });
+    
+    console.log(`The number of data points after filtering: ${filtered.length}`);
+    return filtered;
+  } catch(e){
+    console.error("Fetch error:",e);
+    alert("Failed to load data from API.");
+    return [];
+  }
+}
+
+function aggregateRawData(raw,type){
+  if(raw.length === 0) return {labels:[],IA:[],IB:[],IC:[]};
+
+  if(type==="raw"){
+    return {
+      labels: raw.map(r=>new Date(r.timestamp*1000).toLocaleString()),
+      IA: raw.map(r=>r.IA), IB: raw.map(r=>r.IB), IC: raw.map(r=>r.IC)
+    };
+  }
+  const grouped={};
+  raw.forEach(r=>{
+    const d=new Date(r.timestamp*1000);
+    let key=(type==="daily")? d.toISOString().split("T")[0]: d.toISOString().slice(0,13)+":00";
+    if(!grouped[key]) grouped[key]={IA:[],IB:[],IC:[]};
+    grouped[key].IA.push(r.IA); grouped[key].IB.push(r.IB); grouped[key].IC.push(r.IC);
+  });
+  return {
+    labels:Object.keys(grouped),
+    IA:Object.values(grouped).map(g=>avg(g.IA)),
+    IB:Object.values(grouped).map(g=>avg(g.IB)),
+    IC:Object.values(grouped).map(g=>avg(g.IC))
+  };
+}
+
+async function renderWeekReport(){
+  if(!currentSensor){
+    console.log("No sensor is selected, so the weekly report cannot be generated.");
+    return;
+  }
+  const week=document.getElementById("weekPicker").value;
+  if(!week){
+    console.log("No week number selected, unable to generate weekly report");
+    return;
+  }
+  
+  console.log(`Starting creating Wekkly report - Sensor : ${currentSensor}, weeks: ${week}`);
+  
+  // Parsing ISO week number format
+  const [year, weekNum] = week.split('-W');
+  const start = getDateFromWeek(parseInt(year), parseInt(weekNum));
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  
+  console.log(`Weekly report time range: ${start.toLocaleDateString()} to ${end.toLocaleDateString()}`);
+  
+  const raw=await fetchRawData(currentSensor,Math.floor(start.getTime()/1000),Math.floor(end.getTime()/1000));
+  weekData=aggregateRawData(raw,"daily");
+  
+  console.log(`Weekly Reports data:`, weekData);
+  
+  drawCharts("week",weekData);
+  updateStats("weekStats",weekData);
+}
+
+// Get date from year and week number
+function getDateFromWeek(year, week) {
+  const jan1 = new Date(year, 0, 1);
+  const daysToAdd = (week - 1) * 7 - jan1.getDay() + 1;
+  const result = new Date(year, 0, 1 + daysToAdd);
+  return result;
+}
+
+async function renderMonthReport(){
+  if(!currentSensor)return;
+  const month=document.getElementById("monthPicker").value;
+  if(!month)return;
+  const start=new Date(month+"-01");
+  const end=new Date(start); end.setMonth(start.getMonth()+1);
+  const raw=await fetchRawData(currentSensor,Math.floor(start.getTime()/1000),Math.floor(end.getTime()/1000));
+  monthData=aggregateRawData(raw,"daily");
+  drawCharts("month",monthData);
+  updateStats("monthStats",monthData);
+}
+
+function drawCharts(prefix,data){
+  renderLine(prefix+"Line",data.labels,data.IA,data.IB,data.IC);
+  renderPie(prefix+"Pie",data.IA,data.IB,data.IC);
+  renderBar(prefix+"Bar",data.labels,data.IA,data.IB,data.IC);
+}
+
+function renderLine(canvasId,labels,IA,IB,IC){
+  if(charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId]=new Chart(document.getElementById(canvasId),{
+    type:"line",
+    data:{labels,datasets:[
+      {label:"Current A",data:IA,borderColor:"#2a9d8f",fill:false},
+      {label:"Current B",data:IB,borderColor:"#e76f51",fill:false},
+      {label:"Current C",data:IC,borderColor:"#264653",fill:false}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false}
+  });
+}
+
+function renderPie(canvasId,IA,IB,IC){
+  if(charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId]=new Chart(document.getElementById(canvasId),{
+    type:"pie",
+    data:{labels:["Current A","Current B","Current C"],datasets:[{
+      data:[avg(IA),avg(IB),avg(IC)],
+      backgroundColor:["#2a9d8f","#e76f51","#264653"]
+    }]},
+    options:{responsive:true,maintainAspectRatio:false}
+  });
+}
+
+function renderBar(canvasId,labels,IA,IB,IC){
+  if(charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId]=new Chart(document.getElementById(canvasId),{
+    type:"bar",
+    data:{labels,datasets:[
+      {label:"Current A",data:IA,backgroundColor:"#2a9d8f"},
+      {label:"Current B",data:IB,backgroundColor:"#e76f51"},
+      {label:"Current C",data:IC,backgroundColor:"#264653"}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}
+  });
+}
+
+function updateStats(elId,data){
+  if(data.IA.length===0){document.getElementById(elId).innerText="No data available";return;}
+  const max=a=>Math.max(...a.map(Number)).toFixed(2);
+  const min=a=>Math.min(...a.map(Number)).toFixed(2);
+  const avg=a=>(a.reduce((x,y)=>x+Number(y),0)/a.length).toFixed(2);
+  document.getElementById(elId).innerText=
+    `Max: A ${max(data.IA)}, B ${max(data.IB)}, C ${max(data.IC)} | `+
+    `Min: A ${min(data.IA)}, B ${min(data.IB)}, C ${min(data.IC)} | `+
+    `Avg: A ${avg(data.IA)}, B ${avg(data.IB)}, C ${avg(data.IC)}`;
+}
+
+function avg(arr){return (arr.reduce((a,b)=>a+Number(b),0)/arr.length).toFixed(2);}
+
+// CSV export function
+function exportWeekCSV(){
+  if(!weekData || !currentSensor) {
+    alert("Please select the sensor first and generate a weekly report");
+    return;
+  }
+  
+  const granMin = parseInt(document.getElementById('weekCsvGran').value);
+  const week = document.getElementById('weekPicker').value;
+  
+  let csv = 'Date,Time,Current A,Current B,Current C\n';
+  
+  // Reaggregate data based on granularity
+  const aggregatedData = aggregateDataByGranularity(weekData, granMin);
+  
+  aggregatedData.labels.forEach((label, index) => {
+    csv += `${week},${label},${aggregatedData.IA[index]},${aggregatedData.IB[index]},${aggregatedData.IC[index]}\n`;
+  });
+  
+  downloadCSV(csv, `Weekly_Report_${currentSensor}_${week}.csv`);
+}
+
+function exportMonthCSV(){
+  if(!monthData || !currentSensor) {
+    alert("Please select the sensor first and generate a monthly report");
+    return;
+  }
+  
+  const granMin = parseInt(document.getElementById('monthCsvGran').value);
+  const month = document.getElementById('monthPicker').value;
+  
+  let csv = 'Date,Time,Current A,Current B,Current C\n';
+  
+  // Reaggregate data based on granularity
+  const aggregatedData = aggregateDataByGranularity(monthData, granMin);
+  
+  aggregatedData.labels.forEach((label, index) => {
+    csv += `${month},${label},${aggregatedData.IA[index]},${aggregatedData.IB[index]},${aggregatedData.IC[index]}\n`;
+  });
+  
+  downloadCSV(csv, `Monthly_Report_${currentSensor}_${month}.csv`);
+}
+
+// Reaggregate data based on granularity
+function aggregateDataByGranularity(data, granMin) {
+  if(granMin >= 1440) {
+    // Daily - Return directly to original data
+    return data;
+  }
+  
+  // For finer granularity, the processing is simplified here, and in actual application, it is necessary to re-aggregate from the original data
+  return data;
+}
+
+// Download CSV file
+function downloadCSV(csvContent, filename) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// PDF output function
+function exportWeekPDF(){
+  if(!weekData || !currentSensor) {
+    alert("Please select the sensor first and generate a weekly report");
+    return;
+  }
+  
+  const week = document.getElementById('weekPicker').value;
+  generatePDF('week', `Weekly_Report_${currentSensor}_${week}.pdf`);
+}
+
+function exportMonthPDF(){
+  if(!monthData || !currentSensor) {
+    alert("Please select the sensor first and generate a monthly report");
+    return;
+  }
+  
+  const month = document.getElementById('monthPicker').value;
+  generatePDF('month', `Monthly_Report_${currentSensor}_${month}.pdf`);
+}
+
+// Output PDF
+function generatePDF(reportType, filename) {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF();
+  
+  // Add title
+  pdf.setFontSize(20);
+  pdf.text(reportType === 'week' ? 'Weekly Report' : 'Monthly Report', 20, 30);
+  
+  // Add sensor information
+  pdf.setFontSize(12);
+  pdf.text(`Sensor: ${currentSensor}`, 20, 50);
+  
+  const data = reportType === 'week' ? weekData : monthData;
+  const period = reportType === 'week' ? 
+    document.getElementById('weekPicker').value : 
+    document.getElementById('monthPicker').value;
+  
+  pdf.text(`Period: ${period}`, 20, 65);
+  
+  // Add statistics
+  if(data && data.IA.length > 0) {
+    const max = a => Math.max(...a.map(Number)).toFixed(2);
+    const min = a => Math.min(...a.map(Number)).toFixed(2);
+    const avg = a => (a.reduce((x,y) => x + Number(y), 0) / a.length).toFixed(2);
+    
+    pdf.text('Statistics:', 20, 85);
+    pdf.text(`Max: A ${max(data.IA)}, B ${max(data.IB)}, C ${max(data.IC)}`, 20, 100);
+    pdf.text(`Min: A ${min(data.IA)}, B ${min(data.IB)}, C ${min(data.IC)}`, 20, 115);
+    pdf.text(`Avg: A ${avg(data.IA)}, B ${avg(data.IB)}, C ${avg(data.IC)}`, 20, 130);
+  }
+  
+  // Capturing charts using html2canvas
+  const chartElements = reportType === 'week' ? 
+    ['weekLine', 'weekPie', 'weekBar'] : 
+    ['monthLine', 'monthPie', 'monthBar'];
+  
+  let yPosition = 150;
+  let chartsProcessed = 0;
+  
+  chartElements.forEach((chartId, index) => {
+    const canvas = document.getElementById(chartId);
+     if(canvas) {
+       html2canvas(canvas, { 
+         scale: 3,
+         useCORS: true,
+         allowTaint: true,
+         backgroundColor: '#ffffff',
+         dpi: 300,
+         letterRendering: true,
+         logging: false,
+         imageTimeout: 15000,
+         removeContainer: true,
+         foreignObjectRendering: false
+       }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        pdf.addImage(imgData, 'PNG', 20, yPosition, 160, 80);
+        yPosition += 90;
+        
+        chartsProcessed++;
+        if(chartsProcessed === chartElements.length) {
+          pdf.save(filename);
+        }
+        
+        // If a new page is needed
+        if(index < chartElements.length - 1 && yPosition > 200) {
+          pdf.addPage();
+          yPosition = 20;
+        }
+      });
+    }
+  });
+  
+  // If there is no chart, save it directly
+  if(chartElements.length === 0) {
+    pdf.save(filename);
+  }
+}
+
+// Initialization page
+function initializePage() {
+  // Set the default time range to the current week and month
+  const now = new Date();
+  const currentWeek = getWeekString(now);
+  const currentMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  
+  document.getElementById('weekPicker').value = currentWeek;
+  document.getElementById('monthPicker').value = currentMonth;
+  
+  // Loading sensor
+  loadSensors();
+}
+
+window.onload=initializePage;
+</script>
+
+  <!-- NEW: Installation feature (non-destructive, full console logs) -->
+  <script>
+    // Additional dropdown toggle for Installation
+    function toggleInstallationMenu(){
+      console.log("[Reports/install] toggleInstallationMenu() — toggling dropdown");
+      var m=document.getElementById('installationDropdown');
+      if(!m){ console.warn("[Reports/install] installationDropdown not found"); return; }
+      m.style.display=(m.style.display==='block')?'none':'block';
+    }
+
+    // Hide installation dropdown when clicking outside (keeps original listeners intact)
+    document.addEventListener('click', function(e){
+      var m=document.getElementById('installationDropdown');
+      if(!m) return;
+      var btns=document.querySelectorAll('.sensor-toggle-btn');
+      var insideBtn=false;
+      for(var i=0;i<btns.length;i++){ if(btns[i].contains(e.target)) { insideBtn=true; break; } }
+      if(!insideBtn && !m.contains(e.target)){ m.style.display='none'; }
+    });
+
+    // Load installations from same API and populate dropdown
+    async function loadInstallations(){
+      try{
+        console.log("[Reports/install] fetching installations from:", API_BASE);
+        var res = await fetch(API_BASE);
+        console.log("[Reports/install] response status:", res.status);
+        if(!res.ok){ throw new Error("API returned "+res.status); }
+        var json = await res.json();
+        console.log("[Reports/install] response json:", json);
+        if(!json.items || !json.items.length){
+          console.warn("[Reports/install] no items in API; installations unavailable yet");
+          return;
+        }
+        var namesMap = {};
+        for(var i=0;i<json.items.length;i++){
+          var it=json.items[i];
+          if(it && it.Installation){ namesMap[it.Installation]=true; }
+        }
+        var installations = Object.keys(namesMap);
+        console.log("[Reports/install] found installations:", installations);
+
+        var dd = document.getElementById('installationDropdown');
+        if(!dd){ console.warn("[Reports/install] installationDropdown missing in DOM"); return; }
+        dd.innerHTML = "";
+        installations.forEach(function(name){
+          var div=document.createElement('div');
+          div.textContent=name;
+          div.onclick=function(){ selectInstallation(name); };
+          dd.appendChild(div);
+        });
+
+        if(installations.length>0){
+          console.log("[Reports/install] auto select first installation:", installations[0]);
+          selectInstallation(installations[0]);
+        }
+      }catch(err){
+        console.error("[Reports/install] loadInstallations failed:", err);
+      }
+    }
+
+    // Select an installation and rebuild sensor list under it
+    async function selectInstallation(installation){
+      console.log("[Reports/install] selectInstallation:", installation);
+      var buttons=document.querySelectorAll('.sensor-toggle-btn');
+      if(buttons.length){ buttons[0].textContent = installation + " ▾"; }
+      var m=document.getElementById('installationDropdown');
+      if(m){ m.style.display='none'; }
+      await loadSensorsForInstallation(installation);
+    }
+
+    // Filter sensors by selected installation and repopulate sensor dropdown
+    async function loadSensorsForInstallation(installation){
+      try{
+        console.log("[Reports/install] loadSensorsForInstallation:", installation);
+        var res=await fetch(API_BASE);
+        console.log("[Reports/install] sensors fetch status:", res.status);
+        if(!res.ok){ throw new Error("API returned "+res.status); }
+        var json=await res.json();
+        console.log("[Reports/install] sensors json:", json);
+        if(!json.items || !json.items.length){ console.warn("[Reports/install] empty items"); return; }
+        var arr=[];
+        for(var i=0;i<json.items.length;i++){
+          var r=json.items[i];
+          if(r && r.Installation===installation && r.Sensor_id){ arr.push(r.Sensor_id); }
+        }
+        // unique
+        var seen={}; var sensors=[];
+        for(var j=0;j<arr.length;j++){ if(!seen[arr[j]]){ seen[arr[j]]=true; sensors.push(arr[j]); } }
+        console.log("[Reports/install] sensors for installation", installation, sensors);
+
+        var dropdown=document.getElementById('sensorDropdown');
+        if(!dropdown){ console.warn("[Reports/install] sensorDropdown missing"); return; }
+        dropdown.innerHTML="";
+        sensors.forEach(function(id){
+          var div=document.createElement('div');
+          div.textContent=id;
+          div.onclick=function(){ selectSensor(id); };
+          dropdown.appendChild(div);
+        });
+
+        if(sensors.length>0){
+          console.log("[Reports/install] auto select first sensor:", sensors[0]);
+          selectSensor(sensors[0]);
+          if(buttons && buttons.length>1){ buttons[1].textContent = sensors[0] + " ▾"; }
+        }else{
+          console.warn("[Reports/install] no sensors under installation:", installation);
+        }
+      }catch(err){
+        console.error("[Reports/install] loadSensorsForInstallation failed:", err);
+      }
+    }
+
+    // Run installation loader alongside original onload (do not overwrite)
+    window.addEventListener('load', function(){ 
+      try{ loadInstallations(); } catch(e){ console.error("[Reports/install] addEventListener load failed", e); }
+    });
+  </script>
+  <!-- END NEW Installation feature -->
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

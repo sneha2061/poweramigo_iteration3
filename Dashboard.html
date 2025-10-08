@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard | Power Amigo</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* --- Basic styling for layout, navigation, sidebar, and content --- */
+    body { font-family: Arial; margin: 0; display: flex; }
+    header {
+      background: rgba(255, 255, 255, 0.9);
+      position: fixed; top: 0; width: 100%; z-index: 1000;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .nav-container { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; max-width: 1200px; margin: auto; }
+    .nav-container a { color: #2a9d8f; font-weight: bold; margin-left: 20px; text-decoration: none; font-size: 18px; }
+    .nav-container a:hover { text-decoration: underline; }
+    .nav-right { display: flex; align-items: center; }
+    .search-icon { cursor: pointer; font-size: 20px; color: #2a9d8f; margin-left: 15px; }
+
+    .search-overlay {
+      display: none; position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      width: 60%; background: white; padding: 15px; border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 2000;
+    }
+    .search-container { display: flex; align-items: center; gap: 10px; }
+    .search-container input { padding: 10px; font-size: 16px; width: 100%; border: 1px solid #ccc; border-radius: 4px; }
+    .search-container button { padding: 10px 20px; background: #e76f51; color: white; border: none; border-radius: 4px; cursor: pointer; }
+
+    .sidebar { width: 200px; background: #2a9d8f; color: white; height: 100vh; padding-top: 80px; position: fixed; top: 0; left: 0; }
+    .sidebar a { display: block; padding: 12px 20px; color: white; text-decoration: none; font-weight: bold; font-size: 16px; }
+    .sidebar a:hover { background: #248f7d; }
+
+    .main-content { margin-left: 200px; padding: 100px 40px; flex: 1; }
+    .sensor-controls { display: flex; gap: 15px; align-items: center; margin-bottom: 30px; }
+    .sensor-dropdown { position: relative; }
+    .sensor-toggle-btn {
+      background-color: #2a9d8f; color: white; border: none;
+      padding: 10px 20px; border-radius: 20px; font-size: 16px;
+      cursor: pointer; transition: background-color 0.3s;
+    }
+    .sensor-toggle-btn:hover { background-color: #248f7d; }
+    .dropdown-menu {
+      position: absolute; top: 110%; left: 0; background-color: white;
+      border: 1px solid #ccc; border-radius: 8px; width: 160px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.15); z-index: 1000; display: none;
+    }
+    .dropdown-menu div { padding: 10px; cursor: pointer; }
+    .dropdown-menu div:hover { background-color: #f2f2f2; }
+
+    .cards { display: flex; gap: 20px; margin-bottom: 30px; }
+    .card { background: #f9f9f9; padding: 20px; border-radius: 10px; box-shadow: 0 1px 5px rgba(0,0,0,0.1); flex: 1; min-width: 200px; }
+    .label { font-size: 14px; color: #444; margin-bottom: 5px; }
+    .value { font-size: 22px; font-weight: bold; color: #111; }
+
+    canvas { background: white; margin-top: 20px; }
+    .trend-controls, .csv-controls { display: flex; gap: 10px; margin-top: 20px; align-items: center; flex-wrap: wrap; }
+    select, button, input[type="date"] { padding: 8px 12px; border-radius: 6px; border: 1px solid #2a9d8f; background: white; font-size: 14px; }
+    button { background: #2a9d8f; color: white; cursor: pointer; }
+    h1, h2, h3 { color: #2a9d8f; }
+    .stats { margin-top: 10px; font-size: 16px; color: #333; }
+	
+	button.secondary {
+  background: #e76f51;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+button.secondary:hover {
+  background: #cf6148;
+}
+
+  </style>
+  
+</head>
+<body>
+  <!-- Top Navigation -->
+  <header>
+    <div class="nav-container">
+      <div><img src="images/logo.png" alt="Power Amigo Logo" height="40"/></div>
+      <div class="nav-right">
+        <a href="index.html">Home</a>
+        <a href="#">About Us</a>
+        <a href="#">Contact Us</a>
+        <a href="Dashboard.html">View Data</a>
+        <span class="search-icon" onclick="toggleSearch()">🔍</span>
+		<button class="secondary" onclick="logout()" style="margin-left: 20px;">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Search overlay -->
+  <div id="searchOverlay" class="search-overlay">
+    <div class="search-container">
+      <input type="text" placeholder="Search ..." />
+      <button>SEARCH</button>
+    </div>
+  </div>
+
+  <!-- Sidebar Navigation -->
+  <div class="sidebar">
+    <a href="Dashboard.html">Dashboard</a>
+    <a href="Reports.html">Reports</a>
+    <a href="Setting.html">Settings</a>
+    <a href="Dashboard.html">Home</a>
+  </div>
+
+  <!-- Main Dashboard Content -->
+  <div class="main-content" id="dashboard">
+    <h1>Dashboard</h1>
+
+    <!-- Sensor selection dropdown and date picker -->
+    <div class="sensor-controls">
+
+      <!-- EW: Installation dropdown (same style as sensor) -->
+      <div class="sensor-dropdown">
+        <button class="sensor-toggle-btn" onclick="toggleInstallationMenu()">Select Installation ▾</button>
+        <div id="installationDropdown" class="dropdown-menu"></div>
+      </div>
+      <!-- END NEW BLOCK -->
+
+      <div class="sensor-dropdown">
+        <button class="sensor-toggle-btn" onclick="toggleSensorMenu()">Select Sensor ▾</button>
+        <div id="sensorDropdown" class="dropdown-menu">
+          <div onclick="selectSensor('SENSOR_001')">Sensor A</div>
+          <div onclick="selectSensor('SENSOR_002')">Sensor B</div>
+        </div>
+      </div>
+      <div>
+        <label for="datePicker"><strong>Select Day:</strong></label>
+        <input type="date" id="datePicker" />
+        <button onclick="setToday()">Today</button>
+        <button onclick="setYesterday()">Yesterday</button>
+      </div>
+    </div>
+
+    <!-- Real-time current values -->
+    <div class="cards">
+      <div class="card"><div class="label">Current A (real-time)</div><div class="value" id="currentA">--</div></div>
+      <div class="card"><div class="label">Current B (real-time)</div><div class="value" id="currentB">--</div></div>
+      <div class="card"><div class="label">Current C (real-time)</div><div class="value" id="currentC">--</div></div>
+    </div>
+
+    <!-- Line Chart for current trend -->
+    <h2>Current Trend</h2>
+    <div class="trend-controls">
+      <label for="trendGran">Show Trend Granularity:</label>
+      <select id="trendGran">
+        <option value="15">15 min</option>
+        <option value="5">5 min</option>
+      </select>
+    </div>
+    <canvas id="chart" height="120"></canvas>
+    <div class="stats" id="stats">Max: --, Min: --, Avg: --</div>
+
+    <!-- CSV Export -->
+    <h3>Get the CSV</h3>
+    <div class="csv-controls">
+      <label for="csvGran">CSV Granularity:</label>
+      <select id="csvGran">
+        <option value="15">15 min</option>
+        <option value="5">5 min</option>
+        <option value="1">1 min</option>
+        <option value="0.5">30 sec</option>
+        <option value="0.25">15 sec</option>
+        <option value="0.0833">5 sec</option>
+      </select>
+      <button onclick="exportCSV()">Export CSV</button>
+    </div>
+  </div>
+
+  <script>
+  
+    function logout() {
+  console.log("[dashboard] Logging out...");
+  localStorage.clear(); // Clear all user-related data, including userRole, threshold cache, etc.
+  window.location.href = "Login.html"; // 返回登录页
+}
+
+    /* === API BASE ENDPOINT (use AWS address) === */
+    const API_BASE = "https://40btd9hsk0.execute-api.us-east-1.amazonaws.com/sensors";
+    let apiErrorShown = false; // Prevent duplicate alerts
+
+    /* --- Utility functions --- */
+    function getLocalDateString(dateObj=new Date()) { return dateObj.toISOString().slice(0,10); }
+    function toggleSearch(){const o=document.getElementById("searchOverlay");o.style.display=(o.style.display==="block")?"none":"block";}
+    function toggleSensorMenu(){const m=document.getElementById('sensorDropdown');m.style.display=(m.style.display==='block')?'none':'block';}
+
+    /* NEW: toggle installation menu (non-destructive) */
+    function toggleInstallationMenu(){
+      console.log("[install] toggleInstallationMenu() — toggling dropdown");
+      const m=document.getElementById('installationDropdown');
+      m.style.display=(m.style.display==='block')?'none':'block';
+    }
+
+    /* keep original sensor dropdown auto-hide */
+    document.addEventListener('click',e=>{
+      const m=document.getElementById('sensorDropdown');
+      const b=document.querySelector('.sensor-toggle-btn');
+      if(!b.contains(e.target)&&!m.contains(e.target)){m.style.display='none';}
+    });
+
+    /* n-resizeW: auto-hide installation dropdown without touching the original handler */
+    document.addEventListener('click',e=>{
+      const m=document.getElementById('installationDropdown');
+      const btns=document.querySelectorAll('.sensor-toggle-btn');
+      const clickedInsideBtn=[...btns].some(b=>b.contains(e.target));
+      if(m && !m.contains(e.target) && !clickedInsideBtn){ m.style.display='none'; }
+    });
+
+    /* --- State variables --- */
+    let currentSensor=null;      // Current selected sensor ID
+    let allDaysData=[];          // Stores daily data arrays
+    let selectedDate=getLocalDateString();
+    let chart;
+    const ctx=document.getElementById('chart').getContext('2d');
+    const currentA=document.getElementById('currentA');
+    const currentB=document.getElementById('currentB');
+    const currentC=document.getElementById('currentC');
+    const statsEl=document.getElementById('stats');
+
+    /* --- Fetch daily data for given sensor and date --- */
+    async function fetchDayData(sensor,dateStr){
+      try {
+        const url=API_BASE;
+        console.log("[fetchDayData] fetching:", url, "sensor:", sensor, "date:", dateStr);
+        const res=await fetch(url);
+        console.log('[fetchDayData] API Response status:', res.status);
+        if(!res.ok) {
+          console.error('[fetchDayData] API request failed with status:', res.status);
+          throw new Error(`API returned ${res.status}`);
+        }
+        const json=await res.json();
+        console.log('[fetchDayData] API Response data:', json);
+
+        if(!json.items || json.items.length === 0){
+          console.log("[fetchDayData] No items found for date:", dateStr);
+          allDaysData=allDaysData.filter(d=>d.date!==dateStr);
+          allDaysData.push({date:dateStr,data:[]});
+          apiErrorShown=false;
+          return;
+        }
+
+        const filteredItems = json.items.filter(r => r.Sensor_id === sensor);
+        console.log(`[fetchDayData] filtered items for sensor ${sensor}:`, filteredItems.length);
+
+        allDaysData=allDaysData.filter(d=>d.date!==dateStr);
+        allDaysData.push({
+          date:dateStr,
+          data:filteredItems.map(r=>({time:new Date(r.timestamp*1000),IA:r.IA,IB:r.IB,IC:r.IC}))
+        });
+        console.log("[fetchDayData] allDaysData updated for", dateStr, allDaysData);
+        apiErrorShown=false;
+      } catch (err) {
+        if(!apiErrorShown){
+          alert("Failed to load data from API.");
+          apiErrorShown=true;
+        } else {
+          console.error("[fetchDayData] Failed to load data from API.", err);
+        }
+      }
+    }
+
+    /* --- Fetch latest real-time data point --- */
+    async function fetchLatestData(sensor){
+      try {
+        const url=API_BASE;
+        console.log("[fetchLatestData] fetching latest for sensor:", sensor, "url:", url);
+        const res=await fetch(url);
+        console.log('[fetchLatestData] API Response status:', res.status);
+        if(!res.ok) {
+          console.error('[fetchLatestData] API failed with status:', res.status);
+          throw new Error(`API returned ${res.status}`);
+        }
+        const json=await res.json();
+        console.log('[fetchLatestData] API Response data:', json);
+        apiErrorShown=false;
+
+        if(!json.items || json.items.length === 0){
+          console.error("[fetchLatestData] No items in API response");
+          return null;
+        }
+
+        const sensorItems = json.items.filter(r => r.Sensor_id === sensor);
+        console.log(`[fetchLatestData] items for sensor ${sensor}:`, sensorItems.length);
+        if(sensorItems.length === 0){
+          console.error(`[fetchLatestData] No data for sensor: ${sensor}`);
+          return null;
+        }
+
+        const latest = sensorItems[sensorItems.length - 1];
+        console.log('[fetchLatestData] latest data point:', latest);
+
+        const timestamp = latest.timestamp;
+        if (!timestamp || isNaN(timestamp)) {
+          console.error("[fetchLatestData] Invalid timestamp:", timestamp);
+          return null;
+        }
+        return {time:new Date(timestamp*1000),IA:latest.IA,IB:latest.IB,IC:latest.IC};
+      } catch (err) {
+        if(!apiErrorShown){
+          alert("Failed to load data from API.");
+          apiErrorShown=true;
+        } else {
+          console.error("[fetchLatestData] Failed to load data from API.", err);
+        }
+        return null;
+      }
+    }
+
+    /* --- Sensor selection logic --- */
+    async function selectSensor(sensor){
+      console.log("[selectSensor] selecting sensor:", sensor);
+      currentSensor=sensor;
+
+      document.querySelectorAll('.sensor-toggle-btn')[1].textContent = sensor + ' ▾'; // keep first for installation
+      document.getElementById('sensorDropdown').style.display='none';
+
+      const latest=await fetchLatestData(currentSensor);
+      if(latest){
+        currentA.innerText=`${latest.IA.toFixed(2)} A`;
+        currentB.innerText=`${latest.IB.toFixed(2)} A`;
+        currentC.innerText=`${latest.IC.toFixed(2)} A`;
+        console.log("[selectSensor] updated realtime cards:", latest);
+      }
+
+      setToday();
+    }
+
+    /* --- Group raw data by chosen granularity --- */
+    function groupData(data,granSec){
+      console.log("[groupData] data length:", data.length, "granSec:", granSec);
+      const grouped=[],step=Math.max(1,Math.round(granSec/5));
+      for(let i=0;i<data.length;i+=step){
+        const chunk=data.slice(i,i+step);
+        const avg=k=>chunk.reduce((a,b)=>a+b[k],0)/chunk.length;
+        grouped.push({label:chunk[0].time.toTimeString().slice(0,5),IA:avg('IA'),IB:avg('IB'),IC:avg('IC')});
+      }
+      console.log("[groupData] grouped points:", grouped.length);
+      return grouped;
+    }
+
+    /* --- Render chart with grouped data --- */
+    async function renderChart(granMin=15){
+      if(!currentSensor){ console.log("[renderChart] no currentSensor yet"); return; }
+      const day=allDaysData.find(d=>d.date===selectedDate);
+      if(!day){ statsEl.innerText=`No data for ${selectedDate}`; console.log("[renderChart] no data for date", selectedDate); return; }
+      console.log("[renderChart] rendering date:", selectedDate, "granMin:", granMin, "points:", day.data.length);
+
+      const grouped=groupData(day.data,granMin*60);
+      const labels=grouped.map(d=>d.label);
+      const IA=grouped.map(d=>d.IA);
+      const IB=grouped.map(d=>d.IB);
+      const IC=grouped.map(d=>d.IC);
+      const max=a=>Math.max(...a).toFixed(2);
+      const min=a=>Math.min(...a).toFixed(2);
+      const avg=a=>(a.reduce((x,y)=>x+y,0)/a.length).toFixed(2);
+
+      statsEl.innerText=`Sensor ${currentSensor} (${selectedDate}) | Max A:${max(IA)},B:${max(IB)},C:${max(IC)} | Min A:${min(IA)},B:${min(IB)},C:${min(IC)} | Avg A:${avg(IA)},B:${avg(IB)},C:${avg(IC)}`;
+      const datasets=[
+        {label:'Current A',data:IA,borderColor:'#2a9d8f',fill:false},
+        {label:'Current B',data:IB,borderColor:'#e76f51',fill:false},
+        {label:'Current C',data:IC,borderColor:'#264653',fill:false}
+      ];
+      if(chart){
+        chart.data.labels=labels;
+        chart.data.datasets=datasets;
+        chart.update();
+        console.log("[renderChart] chart updated");
+      } else {
+        chart=new Chart(ctx,{type:'line',data:{labels,datasets},options:{responsive:true}});
+        console.log("[renderChart] chart created");
+      }
+    }
+
+    /* --- Date selectors --- */
+    async function setToday(){
+      selectedDate=getLocalDateString();
+      console.log("[setToday] selectedDate:", selectedDate);
+      await fetchDayData(currentSensor,selectedDate);
+      document.getElementById('datePicker').value=selectedDate;
+      renderChart(parseInt(document.getElementById('trendGran').value));
+    }
+
+    async function setYesterday(){
+      const y=new Date();y.setDate(y.getDate()-1);
+      selectedDate=getLocalDateString(y);
+      console.log("[setYesterday] selectedDate:", selectedDate);
+      await fetchDayData(currentSensor,selectedDate);
+      document.getElementById('datePicker').value=selectedDate;
+      renderChart(parseInt(document.getElementById('trendGran').value));
+    }
+
+    /* --- CSV Export --- */
+    async function exportCSV(){
+      if(!currentSensor){ console.log("[exportCSV] no currentSensor, abort"); return; }
+      const granSec=parseFloat(document.getElementById('csvGran').value)*60;
+      console.log("[exportCSV] granSec:", granSec, "allDaysData length:", allDaysData.length);
+      let csv='Date,Time,Current A,Current B,Current C\n';
+      for(const day of allDaysData){
+        const grouped=groupData(day.data,granSec);
+        grouped.forEach(d=>{csv+=`${day.date},${d.label},${d.IA.toFixed(2)},${d.IB.toFixed(2)},${d.IC.toFixed(2)}\n`;});
+      }
+      const blob=new Blob([csv],{type:'text/csv'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=`Sensor_${currentSensor}_all_data.csv`;a.click();
+      URL.revokeObjectURL(url);
+      console.log("[exportCSV] CSV downloaded");
+    }
+
+    /* --- Event listeners --- */
+    document.getElementById('trendGran').addEventListener('change',e=>{
+      console.log("[trendGran change] new gran:", e.target.value);
+      renderChart(parseInt(e.target.value));
+    });
+    document.getElementById('datePicker').addEventListener('change',async e=>{
+      selectedDate=e.target.value;
+      console.log("[datePicker change] selectedDate:", selectedDate);
+      await fetchDayData(currentSensor,selectedDate);
+      renderChart(parseInt(document.getElementById('trendGran').value));
+    });
+
+    /* --- Load sensors from API --- */
+    async function loadSensors(){
+      try{
+        console.log("[loadSensors] Starting to load sensor data...");
+        const res=await fetch(API_BASE);
+        const json=await res.json();
+        console.log("[loadSensors] API response:", json);
+
+        if(!json.items || json.items.length === 0){
+          console.log("[loadSensors] API items empty");
+          alert("No sensors found from API.");
+          return;
+        }
+
+        const sensors=[...new Set(json.items.map(r=>r.Sensor_id))];
+        console.log("[loadSensors] found sensors:", sensors);
+        const dropdown=document.getElementById('sensorDropdown');
+        dropdown.innerHTML="";
+        sensors.forEach(id=>{
+          const div=document.createElement('div');
+          div.textContent=id;
+          div.onclick=()=>selectSensor(id);
+          dropdown.appendChild(div);
+        });
+
+        if(sensors.length > 0){
+          console.log("[loadSensors] auto select first sensor:", sensors[0]);
+          selectSensor(sensors[0]);
+          document.querySelectorAll('.sensor-toggle-btn')[1].textContent = sensors[0] + ' ▾';
+        }
+      }catch(e){
+        console.error("[loadSensors] Failed to load sensors",e);
+        alert("Error loading sensors, check console.");
+      }
+    }
+
+    /* --- Initialize page (original) --- */
+    window.onload = loadSensors;
+
+    /* --- Real-time data updater --- */
+    setInterval(async ()=>{
+      if(!currentSensor){ console.log("[realtime] no currentSensor yet"); return; }
+      const latest=await fetchLatestData(currentSensor);
+      if(!latest || !latest.time){ console.log("[realtime] no latest data"); return; }
+      const today=getLocalDateString(latest.time);
+      let day=allDaysData.find(d=>d.date===today);
+      if(!day){
+        await fetchDayData(currentSensor,today);
+        day=allDaysData.find(d=>d.date===today);
+      }
+      day.data.push(latest);
+      currentA.innerText=`${latest.IA.toFixed(2)} A`;
+      currentB.innerText=`${latest.IB.toFixed(2)} A`;
+      currentC.innerText=`${latest.IC.toFixed(2)} A`;
+      if(selectedDate===today){
+        renderChart(parseInt(document.getElementById('trendGran').value));
+      }
+      console.log("[realtime] appended latest and updated cards", latest);
+    },5000);
+
+    /* NEW: Installation feature (non-destructive) */
+
+    // Load all installations from same API (expects `Installation` field later)
+    async function loadInstallations(){
+      try{
+        console.log("[install] fetching installations from:", API_BASE);
+        const res=await fetch(API_BASE);
+        console.log("[install] response status:", res.status);
+        const json=await res.json();
+        console.log("[install] response json:", json);
+
+        if(!json.items || json.items.length===0){
+          console.warn("[install] empty items; installations cannot be listed yet");
+          return;
+        }
+        const installations=[...new Set(json.items.map(r=>r.Installation).filter(Boolean))];
+        console.log("[install] found installations:", installations);
+
+        const dropdown=document.getElementById('installationDropdown');
+        dropdown.innerHTML="";
+        installations.forEach(name=>{
+          const div=document.createElement('div');
+          div.textContent=name;
+          div.onclick=()=>selectInstallation(name);
+          dropdown.appendChild(div);
+        });
+
+        if(installations.length>0){
+          console.log("[install] auto select first installation:", installations[0]);
+          selectInstallation(installations[0]);
+        }
+      }catch(err){
+        console.error("[install] loadInstallations failed:", err);
+      }
+    }
+
+    // When an installation is selected, rebuild sensor list to only its sensors
+    async function selectInstallation(installation){
+      console.log("[install] selectInstallation:", installation);
+      // update the first green button text (installation button)
+      document.querySelectorAll('.sensor-toggle-btn')[0].textContent = installation + ' ▾';
+      document.getElementById('installationDropdown').style.display='none';
+      await loadSensorsForInstallation(installation);
+    }
+
+    // Populate sensor dropdown for the chosen installation
+    async function loadSensorsForInstallation(installation){
+      try{
+        console.log("[install] loadSensorsForInstallation:", installation);
+        const res=await fetch(API_BASE);
+        console.log("[install] sensors fetch status:", res.status);
+        const json=await res.json();
+        console.log("[install] sensors json:", json);
+
+        if(!json.items || json.items.length===0){
+          console.warn("[install] no items to filter sensors by installation");
+          return;
+        }
+        const filtered=json.items.filter(r=>r.Installation===installation);
+        const sensors=[...new Set(filtered.map(r=>r.Sensor_id))];
+        console.log(`[install] sensors for installation ${installation}:`, sensors);
+
+        const dropdown=document.getElementById('sensorDropdown');
+        dropdown.innerHTML="";
+        sensors.forEach(id=>{
+          const div=document.createElement('div');
+          div.textContent=id;
+          div.onclick=()=>selectSensor(id);
+          dropdown.appendChild(div);
+        });
+
+        if(sensors.length>0){
+          console.log("[install] auto select first sensor in installation:", sensors[0]);
+          selectSensor(sensors[0]);
+          document.querySelectorAll('.sensor-toggle-btn')[1].textContent = sensors[0] + ' ▾';
+        }else{
+          console.warn("[install] no sensors under installation:", installation);
+        }
+      }catch(err){
+        console.error("[install] loadSensorsForInstallation failed:", err);
+      }
+    }
+
+    // run installation loader in parallel with your original onload
+    window.addEventListener('load', loadInstallations);
+    /* END NEW: Installation feature */
+	/* === Threshold Integration from Setting === */
+const LS_KEY = "POWER_AMIGO_THRESHOLDS_V2";
+let thresholdsByInstall = {};
+
+function loadThresholdsFromLS() {
+  try {
+    thresholdsByInstall = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+    console.log("[dashboard] thresholds loaded:", thresholdsByInstall);
+  } catch (e) {
+    thresholdsByInstall = {};
+  }
+}
+
+/* === Apply threshold color & alert logic === */
+function checkThresholdAndHighlight(currentInstall, latest) {
+  const t = thresholdsByInstall[currentInstall];
+  if (!t) return;
+
+  const over = [];
+  if (latest.IA > t.IA.max || latest.IA < t.IA.min) over.push("A");
+  if (latest.IB > t.IB.max || latest.IB < t.IB.min) over.push("B");
+  if (latest.IC > t.IC.max || latest.IC < t.IC.min) over.push("C");
+
+  // Changing UI Colors
+  currentA.style.color = (latest.IA > t.IA.max || latest.IA < t.IA.min) ? "red" : "#111";
+  currentB.style.color = (latest.IB > t.IB.max || latest.IB < t.IB.min) ? "red" : "#111";
+  currentC.style.color = (latest.IC > t.IC.max || latest.IC < t.IC.min) ? "red" : "#111";
+
+  // Show top warning bar
+  if (over.length > 0) showDashboardAlert(`${currentInstall} sensor exceeded limit(s): ${over.join(", ")}`);
+}
+
+/* === Top warning bar === */
+function showDashboardAlert(message) {
+  let banner = document.getElementById("dashboardAlert");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "dashboardAlert";
+    banner.style.cssText = `
+      position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+      background-color: #ff5959; color: white; padding: 10px 24px;
+      border-radius: 8px; font-weight: bold; z-index: 2000;
+    `;
+    document.body.appendChild(banner);
+  }
+  banner.textContent = message;
+  banner.style.display = "block";
+  setTimeout(() => banner.style.display = "none", 3000);
+}
+
+/* === Hook it up to real-time data updates === */
+setInterval(async ()=>{
+  if(!currentSensor) return;
+  const latest = await fetchLatestData(currentSensor);
+  if(!latest || !latest.time) return;
+
+  currentA.innerText = `${latest.IA.toFixed(2)} A`;
+  currentB.innerText = `${latest.IB.toFixed(2)} A`;
+  currentC.innerText = `${latest.IC.toFixed(2)} A`;
+
+  // Key: Call threshold detection here
+  const currentInstall = document.querySelectorAll('.sensor-toggle-btn')[0].textContent.replace(" ▾","");
+  checkThresholdAndHighlight(currentInstall, latest);
+}, 5000);
+
+/* === initialization === */
+window.addEventListener('load', loadThresholdsFromLS);
+
+
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

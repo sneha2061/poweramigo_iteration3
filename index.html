@@ -152,10 +152,13 @@
     try {
       // === Real backend login interface ===
       const res = await fetch("https://b7t3adfkvk.execute-api.us-east-1.amazonaws.com/dev/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      Username: username,
+      Password: password
+    })
+  });
 
       // If the response is not 200
       if (!res.ok) {
@@ -194,3 +197,4 @@
 
 </body>
 </html>
+

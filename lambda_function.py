@@ -5,48 +5,69 @@ dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table('Users')
 
 def lambda_handler(event, context):
-    print("Event:", event)
-    method = event.get('httpMethod', '')
-    path = event.get('path', '')
+    print("Raw event:", json.dumps(event))
 
-# Handle CORS preflight
+    method = event.get('httpMethod', '')
+    raw_path = event.get('path', '')
+    print("Full path received by Lambda:", raw_path)
+
+    # Normalize route by stripping stage prefix /dev and /api
+    route_path = raw_path
+    if route_path.startswith("/dev"):
+        route_path = route_path[4:]  # remove /dev
+    if route_path.startswith("/api"):
+        route_path = route_path[4:]  # remove /api
+    print("Normalized route path:", route_path)
+
+    # Handle CORS preflight
     if method == "OPTIONS":
         return response(200, {"message": "CORS preflight OK"})
-    if method == "POST" and path.endswith("/login"):
+
+    # Route handling
+    if method == "POST" and "/login" in route_path:
         return login(event)
-    elif method == "GET" and path.endswith("/users"):
+    elif method == "GET" and "/users" in route_path:
         return get_users()
-    elif method == "POST" and path.endswith("/users"):
+    elif method == "POST" and "/users" in route_path:
         return add_user(event)
-    elif method == "DELETE" and "/users/" in path:
-        return delete_user(event)
+    elif method == "DELETE" and "/users/" in route_path:
+        return delete_user(event, route_path)
     else:
         return response(404, {"message": "Invalid route"})
 
 # -------- LOGIN FUNCTION ----------
 def login(event):
-    body = json.loads(event['body'])
-    username = body.get('Username')
-    password = body.get('Password')
+    try:
+        raw_body = event.get('body')
+        body = json.loads(raw_body) if raw_body else {}
+        username = body.get('Username') or body.get('username')
+        password = body.get('Password') or body.get('password')
 
-    if not username or not password:
-        return response(400, {"success": False, "message": "Missing Username or Password"})
+        print("Login attempt:", username, password)
 
-    res = table.get_item(Key={'Username': username})
-    user = res.get('Item')
+        if not username or not password:
+            return response(400, {"success": False, "message": "Missing Username or Password"})
 
-    if not user:
-        return response(400, {"success": False, "message": "User not found"})
-    if user['Password'] != password:
-        return response(401, {"success": False, "message": "Invalid password"})
+        res = table.get_item(Key={'Username': username})
+        user = res.get('Item')
+        print("User from DB:", user)
 
-    return response(200, {
-        "success": True,
-        "message": "Login successful",
-        "Username": user['Username'],
-        "Role": user['Role'],
-        "Status": user['Status']
-    })
+        if not user:
+            return response(400, {"success": False, "message": "User not found"})
+        if user.get('Password') != password:
+            return response(401, {"success": False, "message": "Invalid password"})
+
+        return response(200, {
+            "success": True,
+            "message": "Login successful",
+            "Username": user['Username'],
+            "Role": user.get('Role', 'user'),
+            "Status": user.get('Status', 'active')
+        })
+
+    except Exception as e:
+        print("Unexpected error in login:", e)
+        return response(500, {"success": False, "message": "Server error"})
 
 # -------- GET ALL USERS ----------
 def get_users():
@@ -58,7 +79,7 @@ def get_users():
 
 # -------- ADD USER ----------
 def add_user(event):
-    body = json.loads(event['body'])
+    body = json.loads(event.get('body', '{}'))
     username = body.get('Username')
     email = body.get('Email')
     role = body.get('Role', 'user')
@@ -69,7 +90,7 @@ def add_user(event):
 
     table.put_item(Item={
         'Username': username,
-        'Password': 'default123',  # Default password for new users
+        'Password': 'default123',  # default password
         'Email': email,
         'Role': role,
         'Status': status
@@ -78,8 +99,11 @@ def add_user(event):
     return response(200, {"success": True, "message": "User added successfully"})
 
 # -------- DELETE USER ----------
-def delete_user(event):
-    username = event['pathParameters']['username']
+def delete_user(event, route_path):
+    try:
+        username = route_path.split("/users/")[1]
+    except IndexError:
+        return response(400, {"success": False, "message": "Username not specified"})
     table.delete_item(Key={'Username': username})
     return response(200, {"success": True, "message": f"User {username} deleted"})
 
@@ -90,7 +114,11 @@ def response(status, body):
         "headers": {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS"
+            "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type"
         },
         "body": json.dumps(body)
     }
+
+
+   

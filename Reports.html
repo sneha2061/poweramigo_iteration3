@@ -35,6 +35,7 @@
     .dropdown-menu { position: absolute; top: 110%; left: 0; background-color: white; border: 1px solid #ccc; border-radius: 8px; width: 160px; box-shadow: 0 2px 5px rgba(0,0,0,0.15); z-index: 1000; display: none; }
     .dropdown-menu div { padding: 10px; cursor: pointer; }
     .dropdown-menu div:hover { background-color: #f2f2f2; }
+   
 
     input[type="week"], input[type="month"] { padding: 8px 12px; border: 1px solid #2a9d8f; border-radius: 6px; }
     .chart-row { display: flex; gap: 20px; align-items: stretch; margin-bottom: 30px; flex-wrap: wrap; }
@@ -93,13 +94,13 @@ button.secondary:hover {
 
       <!-- NEW: Installation dropdown (added without modifying existing) -->
       <div class="sensor-dropdown">
-        <button class="sensor-toggle-btn" onclick="toggleInstallationMenu()">Select Installation ▾</button>
+        <button id="btnInstall" class="sensor-toggle-btn" onclick="toggleInstallationMenu()">Select Installation ▾</button>
         <div id="installationDropdown" class="dropdown-menu"></div>
       </div>
       <!-- END NEW BLOCK -->
 
       <div class="sensor-dropdown">
-        <button class="sensor-toggle-btn" onclick="toggleSensorMenu()">Select Sensor ▾</button>
+        <button id="btnSensor" class="sensor-toggle-btn" onclick="toggleSensorMenu()">Select Sensor ▾</button>
         <div id="sensorDropdown" class="dropdown-menu"></div>
       </div>
       <label><strong>Select Week:</strong></label>
@@ -165,7 +166,7 @@ button.secondary:hover {
     // Clear the user login status (according to your front-end login implementation)
     localStorage.removeItem('userRole');
     // Jump back to the login page
-    window.location.href = 'Login.html';
+    window.location.href = 'index.html';
   }
 
 const API_BASE = "https://40btd9hsk0.execute-api.us-east-1.amazonaws.com/sensors";
@@ -206,8 +207,10 @@ async function loadSensors(){
     // Automatically select the first sensor
     if(sensors.length > 0){
       selectSensor(sensors[0]);
-      document.querySelector('.sensor-toggle-btn').textContent = sensors[0] + ' ▾';
-    }
+      document.getElementById('btnSensor').textContent = sensors[0] + ' ▾';
+  }
+
+
   }catch(e){
     console.error("Failed to load sensors",e);
     alert("Error loading sensors, check console.");
@@ -219,7 +222,7 @@ function selectSensor(sensor){
   currentSensor=sensor;
   
   // Update button display text
-  document.querySelector('.sensor-toggle-btn').textContent = sensor + ' ▾';
+  document.getElementById('btnSensor').textContent = sensor + ' ▾';
   
   // Hide drop-down menu
   document.getElementById('sensorDropdown').style.display = 'none';
@@ -351,6 +354,12 @@ async function renderMonthReport(){
 }
 
 function drawCharts(prefix,data){
+  console.log(`[drawCharts] ${prefix} - data:`, data);
+  console.log(`[drawCharts] ${prefix} - labels length:`, data.labels.length);
+  console.log(`[drawCharts] ${prefix} - IA length:`, data.IA.length);
+  console.log(`[drawCharts] ${prefix} - IB length:`, data.IB.length);
+  console.log(`[drawCharts] ${prefix} - IC length:`, data.IC.length);
+  
   renderLine(prefix+"Line",data.labels,data.IA,data.IB,data.IC);
   renderPie(prefix+"Pie",data.IA,data.IB,data.IC);
   renderBar(prefix+"Bar",data.labels,data.IA,data.IB,data.IC);
@@ -371,10 +380,24 @@ function renderLine(canvasId,labels,IA,IB,IC){
 
 function renderPie(canvasId,IA,IB,IC){
   if(charts[canvasId]) charts[canvasId].destroy();
+  
+  // Calculate averages and validate data
+  const avgIA = avg(IA);
+  const avgIB = avg(IB);
+  const avgIC = avg(IC);
+  
+  console.log(`[renderPie] ${canvasId} - IA: ${avgIA}, IB: ${avgIB}, IC: ${avgIC}`);
+  
+  // Check if data is valid (not NaN or empty)
+  if(isNaN(avgIA) || isNaN(avgIB) || isNaN(avgIC) || IA.length === 0) {
+    console.warn(`[renderPie] ${canvasId} - Invalid data, skipping pie chart`);
+    return;
+  }
+  
   charts[canvasId]=new Chart(document.getElementById(canvasId),{
     type:"pie",
     data:{labels:["Current A","Current B","Current C"],datasets:[{
-      data:[avg(IA),avg(IB),avg(IC)],
+      data:[avgIA,avgIB,avgIC],
       backgroundColor:["#2a9d8f","#e76f51","#264653"]
     }]},
     options:{responsive:true,maintainAspectRatio:false}
@@ -405,7 +428,10 @@ function updateStats(elId,data){
     `Avg: A ${avg(data.IA)}, B ${avg(data.IB)}, C ${avg(data.IC)}`;
 }
 
-function avg(arr){return (arr.reduce((a,b)=>a+Number(b),0)/arr.length).toFixed(2);}
+function avg(arr){
+  if(!arr || arr.length === 0) return 0;
+  return (arr.reduce((a,b)=>a+Number(b),0)/arr.length).toFixed(2);
+}
 
 // CSV export function
 function exportWeekCSV(){
@@ -584,7 +610,10 @@ function initializePage() {
   document.getElementById('weekPicker').value = currentWeek;
   document.getElementById('monthPicker').value = currentMonth;
   
-  // Loading sensor
+  // Loading installations first, then sensors
+  loadInstallations();
+  
+  // Also load sensors directly in case no installations are available
   loadSensors();
 }
 
@@ -598,7 +627,11 @@ window.onload=initializePage;
       console.log("[Reports/install] toggleInstallationMenu() — toggling dropdown");
       var m=document.getElementById('installationDropdown');
       if(!m){ console.warn("[Reports/install] installationDropdown not found"); return; }
+      console.log("[Reports/install] Current display style:", m.style.display);
+      console.log("[Reports/install] Dropdown has", m.children.length, "children");
+      
       m.style.display=(m.style.display==='block')?'none':'block';
+      console.log("[Reports/install] New display style:", m.style.display);
     }
 
     // Hide installation dropdown when clicking outside (keeps original listeners intact)
@@ -620,10 +653,12 @@ window.onload=initializePage;
         if(!res.ok){ throw new Error("API returned "+res.status); }
         var json = await res.json();
         console.log("[Reports/install] response json:", json);
-        if(!json.items || !json.items.length){
-          console.warn("[Reports/install] no items in API; installations unavailable yet");
+
+        if(!json.items || json.items.length === 0){
+          console.warn("[Reports/install] empty items; installations cannot be listed yet");
           return;
         }
+        
         var namesMap = {};
         for(var i=0;i<json.items.length;i++){
           var it=json.items[i];
@@ -653,11 +688,19 @@ window.onload=initializePage;
 
     // Select an installation and rebuild sensor list under it
     async function selectInstallation(installation){
-      console.log("[Reports/install] selectInstallation:", installation);
-      var buttons=document.querySelectorAll('.sensor-toggle-btn');
-      if(buttons.length){ buttons[0].textContent = installation + " ▾"; }
+    console.log("[Reports/install] selectInstallation:", installation);
+    const btnInstall = document.getElementById('btnInstall');
+    if (btnInstall) btnInstall.textContent = installation + " ▾";
       var m=document.getElementById('installationDropdown');
       if(m){ m.style.display='none'; }
+      
+      // Sensor button is now always enabled
+      // const btnSensor = document.getElementById('btnSensor');
+      // if (btnSensor) {
+      //   btnSensor.disabled = false;
+      //   btnSensor.textContent = "Select Sensor ▾";
+      // }
+      
       await loadSensorsForInstallation(installation);
     }
 
@@ -692,9 +735,9 @@ window.onload=initializePage;
         });
 
         if(sensors.length>0){
-          console.log("[Reports/install] auto select first sensor:", sensors[0]);
-          selectSensor(sensors[0]);
-          if(buttons && buttons.length>1){ buttons[1].textContent = sensors[0] + " ▾"; }
+        console.log("[Reports/install] auto select first sensor:", sensors[0]);
+        selectSensor(sensors[0]);
+        document.getElementById('btnSensor').textContent = sensors[0] + " ▾";
         }else{
           console.warn("[Reports/install] no sensors under installation:", installation);
         }
@@ -703,18 +746,11 @@ window.onload=initializePage;
       }
     }
 
-    // Run installation loader alongside original onload (do not overwrite)
-    window.addEventListener('load', function(){ 
-      try{ loadInstallations(); } catch(e){ console.error("[Reports/install] addEventListener load failed", e); }
-    });
+    // Installation loader is now called from initializePage()
   </script>
   <!-- END NEW Installation feature -->
 </body>
 </html>
-
-
-
-
 
 
 

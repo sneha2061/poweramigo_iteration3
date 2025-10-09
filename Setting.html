@@ -268,7 +268,7 @@
     localStorage.removeItem("userRole");
     localStorage.removeItem("username");
     alert("You have been logged out.");
-    window.location.href = "login.html";
+    window.location.href = "index.html";
   }
 }
 
@@ -388,7 +388,7 @@ window.addEventListener("load", () => {
     async function selectInstallation(installation){
       console.log("[setting] selectInstallation:", installation);
       currentInstallation = installation;
-      document.getElementById('btnInstall').textContent = installation + " Ã¢â€“Â¾";
+      document.getElementById('btnInstall').textContent = installation + " ▾";
       document.getElementById('installDropdown').style.display='none';
 
       // enable sensor button
@@ -436,7 +436,7 @@ window.addEventListener("load", () => {
     function selectSensor(sensor){
       console.log("[setting] selectSensor:", sensor);
       currentSensor = sensor;
-      document.getElementById('btnSensor').textContent = sensor + " Ã¢â€“Â¾";
+      document.getElementById('btnSensor').textContent = sensor + " ▾";
       document.getElementById('sensorDropdown').style.display='none';
     }
 
@@ -692,7 +692,7 @@ window.addEventListener("load", () => {
     }
 	function showAlertBanner(message) {
   const banner = document.getElementById("alertBanner");
-  banner.textContent = "⚠️" + message;
+  banner.textContent = "⚠️ " + message;
   banner.style.display = "block";
   setTimeout(() => {
     banner.style.display = "none";
@@ -755,12 +755,12 @@ async function loadUsers() {
     users.forEach(u => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${u.username}</td>
-        <td>${u.email}</td>
-        <td>${u.role}</td>
-        <td>${u.status}</td>
+         <td>${u.Username || "—"}</td>
+        <td>${u.Email || "—"}</td>
+        <td>${u.Role || "—"}</td>
+        <td>${u.Status || "—"}</td>
         <td>
-          <button class="secondary" onclick="deleteUser('${u.username}')">Delete</button>
+		<button class="secondary" onclick="deleteUser('${u.Username}')">Delete</button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -785,7 +785,7 @@ async function addUser() {
     const res = await fetch(USER_API, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: name, email, role })
+      body: JSON.stringify({ Username: name, Email: email, Role: role })
     });
     console.log("[UserMgmt] Added user:", name);
     alert("User added!");
@@ -829,6 +829,7 @@ window.addEventListener("load", () => {
   </script>
 </body>
 </html>
+
 
 
 

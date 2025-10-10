@@ -45,7 +45,7 @@
     .sensor-toggle-btn:hover { background-color: #248f7d; }
     .dropdown-menu {
       position: absolute; top: 110%; left: 0; background-color: white;
-      border: 1px solid #ccc; border-radius: 8px; width: 200px;
+      border: 1px solid #ccc; border-radius: 8px; width: 160px;
       box-shadow: 0 2px 5px rgba(0,0,0,0.15); z-index: 1000; display: none;
     }
     .dropdown-menu div { padding: 10px; cursor: pointer; }
@@ -273,24 +273,24 @@
 }
 
     // === ACCESS CONTROL: Admin-only page ===
-window.addEventListener("load", () => {
-  const role = localStorage.getItem("userRole");
-  console.log("[Auth] Checking user role:", role);
+    window.addEventListener("load", () => {
+      const role = localStorage.getItem("userRole");
+      console.log("[Auth] Checking user role:", role);
 
-  if (!role) {
-    alert("Please log in first.");
-    window.location.href = "login.html";
-    return;
-  }
+      if (!role) {
+        alert("Please log in first.");
+        window.location.href = "login.html";
+        return;
+      }
 
-  if (role !== "admin") {
-    alert("Access denied. Only admin can open the Setting page.");
-    window.location.href = "index.html";
-    return;
-  }
+      if (role !== "admin") {
+        alert("Access denied. Only admin can open the Setting page.");
+        window.location.href = "index.html";
+        return;
+      }
 
-  console.log("[Auth] Access granted: Admin verified.");
-});
+      console.log("[Auth] Access granted: Admin verified.");
+    });
 
     /* ----------- Constants & State ----------- */
     const API_BASE = "https://40btd9hsk0.execute-api.us-east-1.amazonaws.com/sensors";
@@ -362,11 +362,12 @@ window.addEventListener("load", () => {
         const json = await res.json();
         console.log("[setting] installations json:", json);
 
-        if(!json.items || json.items.length===0){
-          console.warn("[setting] empty items; cannot build installations");
+        if(!json.items || json.items.length === 0){
+          console.warn("[setting] empty items; installations cannot be listed yet");
           return;
         }
-        const installs = [...new Set(json.items.map(r=>r.Installation || "Unknown Installation"))];
+        
+        const installs = [...new Set(json.items.map(r=>r.Installation).filter(Boolean))];
         console.log("[setting] found installations:", installs);
 
         const dd = document.getElementById('installDropdown');
@@ -378,8 +379,10 @@ window.addEventListener("load", () => {
           dd.appendChild(div);
         });
 
-        // auto select first
-        if(installs.length>0) selectInstallation(installs[0]);
+        if(installs.length>0){
+          console.log("[setting] auto select first installation:", installs[0]);
+          selectInstallation(installs[0]);
+        }
       }catch(err){
         console.error("[setting] loadInstallations failed:", err);
       }
@@ -391,8 +394,8 @@ window.addEventListener("load", () => {
       document.getElementById('btnInstall').textContent = installation + " ▾";
       document.getElementById('installDropdown').style.display='none';
 
-      // enable sensor button
-      document.getElementById('btnSensor').disabled = false;
+      // Sensor button remains disabled - only Installation selection is allowed
+      // document.getElementById('btnSensor').disabled = false;
 
       // load its sensors
       await loadSensorsForInstallation(installation);
@@ -829,6 +832,8 @@ window.addEventListener("load", () => {
   </script>
 </body>
 </html>
+
+
 
 
 

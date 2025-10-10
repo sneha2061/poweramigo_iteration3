@@ -89,7 +89,9 @@ button.secondary:hover {
         <a href="Dashboard.html">View Data</a>
         <span class="search-icon" onclick="toggleSearch()">🔍</span>
 		<button class="secondary" onclick="logout()" style="margin-left: 20px;">Logout</button>
-      </div>
+    <!-- Add near Logout button in header -->
+<button class="secondary" onclick="openChangePasswordModal()" style="margin-left: 10px;">Change Password</button>
+</div>
     </div>
   </header>
 
@@ -108,6 +110,20 @@ button.secondary:hover {
     <a href="Setting.html">Settings</a>
     <a href="Dashboard.html">Home</a>
   </div>
+<!-- Change Password Modal -->
+<div id="changePasswordModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    background:white; padding:20px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.3); z-index:3000; width:300px;">
+  <h3>Change Password</h3>
+  <label>Current Password:</label><br/>
+  <input type="password" id="OldPassword" style="width:100%; margin-bottom:10px;"/><br/>
+  <label>New Password:</label><br/>
+  <input type="password" id="NewPassword" style="width:100%; margin-bottom:10px;"/><br/>
+  <label>Confirm New Password:</label><br/>
+  <input type="password" id="confirmNewPassword" style="width:100%; margin-bottom:10px;"/><br/>
+  <button onclick="submitChangePassword()" style="margin-right:10px;">Submit</button>
+  <button onclick="closeChangePasswordModal()">Cancel</button>
+  <div id="changePasswordMessage" style="margin-top:10px; color:red;"></div>
+</div>
 
   <!-- Main Dashboard Content -->
   <div class="main-content" id="dashboard">
@@ -184,6 +200,52 @@ button.secondary:hover {
     /* === API BASE ENDPOINT (use AWS address) === */
     const API_BASE = "https://40btd9hsk0.execute-api.us-east-1.amazonaws.com/sensors";
     let apiErrorShown = false; // Prevent duplicate alerts
+
+function openChangePasswordModal() {
+    document.getElementById('changePasswordModal').style.display = 'block';
+    document.getElementById('changePasswordMessage').innerText = '';
+}
+
+function closeChangePasswordModal() {
+    document.getElementById('changePasswordModal').style.display = 'none';
+    document.getElementById('OldPassword').value = '';
+    document.getElementById('NewPassword').value = '';
+    document.getElementById('confirmNewPassword').value = '';
+}
+
+async function submitChangePassword() {
+    const current = document.getElementById('OldPassword').value;
+    const newP = document.getElementById('NewPassword').value;
+    const confirmP = document.getElementById('confirmNewPassword').value;
+    const username = localStorage.getItem('username'); // Assuming you store username locally after login
+
+    if(!current || !newP || !confirmP){
+        document.getElementById('changePasswordMessage').innerText = 'All fields are required';
+        return;
+    }
+    if(newP !== confirmP){
+        document.getElementById('changePasswordMessage').innerText = 'New passwords do not match';
+        return;
+    }
+
+    try {
+        const res = await fetch("https://b7t3adfkvk.execute-api.us-east-1.amazonaws.com/dev/api/changePassword", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ Username: username, OldPassword: current, NewPassword: newP })
+        });
+        const json = await res.json();
+        if(json.success){
+            alert('Password changed successfully!');
+            closeChangePasswordModal();
+        } else {
+            document.getElementById('changePasswordMessage').innerText = json.message || 'Error';
+        }
+    } catch(e){
+        console.error(e);
+        document.getElementById('changePasswordMessage').innerText = 'Failed to change password';
+    }
+}
 
     /* --- Utility functions --- */
     function getLocalDateString(dateObj=new Date()) { return dateObj.toISOString().slice(0,10); }
@@ -641,6 +703,7 @@ window.addEventListener('load', loadThresholdsFromLS);
 
 
   </script>
+
 </body>
 </html>
 

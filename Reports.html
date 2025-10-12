@@ -176,7 +176,69 @@ let weekData = null;
 let monthData = null;
 
 function toggleSearch(){const o=document.getElementById("searchOverlay");o.style.display=(o.style.display==="block")?"none":"block";}
-function toggleSensorMenu(){const m=document.getElementById('sensorDropdown');m.style.display=(m.style.display==='block')?'none':'block';}
+function toggleSensorMenu(){
+  const btnSensor = document.getElementById('btnSensor');
+  if (btnSensor && btnSensor.disabled) {
+    console.log("[toggleSensorMenu] Sensor button is disabled");
+    return;
+  }
+  
+  console.log("[toggleSensorMenu] called");
+  
+  // Get the currently selected installation
+  const btnInstall = document.getElementById('btnInstall');
+  const currentInstallation = btnInstall ? btnInstall.textContent.replace(' ▾', '') : null;
+  console.log("[toggleSensorMenu] current installation:", currentInstallation);
+  
+  // Get sensors for the current installation
+  let sensors = [];
+  if (currentInstallation && currentInstallation !== 'Select Installation') {
+    // Fetch sensors for the current installation
+    fetch(API_BASE)
+      .then(res => res.json())
+      .then(json => {
+        if (json.items && json.items.length > 0) {
+          const filtered = json.items.filter(r => r.Installations === currentInstallation);
+          sensors = [...new Set(filtered.map(r => r.Sensor_id))].sort();
+          console.log("[toggleSensorMenu] sensors for installation", currentInstallation, ":", sensors);
+          
+          // Show sensor selection
+          showSensorSelection(sensors);
+        }
+      })
+      .catch(err => {
+        console.error("[toggleSensorMenu] failed to fetch sensors:", err);
+        showSensorSelection(['SENSOR_001', 'SENSOR_002', 'SENSOR_003']);
+      });
+  } else {
+    console.log("[toggleSensorMenu] no installation selected");
+    showSensorSelection(['SENSOR_001', 'SENSOR_002', 'SENSOR_003']);
+  }
+  
+  function showSensorSelection(sensors) {
+    // Create dropdown in the same style as installation dropdown
+    const sensorDropdown = document.getElementById('sensorDropdown');
+    
+    // Clear existing content
+    sensorDropdown.innerHTML = '';
+    
+    // Add sensor options
+    sensors.forEach(sensor => {
+      const div = document.createElement('div');
+      div.textContent = sensor;
+      div.onclick = () => {
+        selectSensor(sensor);
+        sensorDropdown.style.display = 'none';
+      };
+      sensorDropdown.appendChild(div);
+    });
+    
+    // Show the dropdown
+    sensorDropdown.style.display = 'block';
+    
+    console.log("[toggleSensorMenu] dropdown created with sensors:", sensors);
+  }
+}
 document.addEventListener('click',e=>{const m=document.getElementById('sensorDropdown');const b=document.querySelector('.sensor-toggle-btn');if(!b.contains(e.target)&&!m.contains(e.target)){m.style.display='none';}});
 
 // Dynamic load cell
@@ -610,19 +672,124 @@ function initializePage() {
   document.getElementById('weekPicker').value = currentWeek;
   document.getElementById('monthPicker').value = currentMonth;
   
-  // Loading installations first, then sensors
+  // Loading installations first - sensors will be loaded after installation selection
   loadInstallations();
+}
+
+// Load installations from API and populate dropdown
+async function loadInstallations(){
+  try{
+    console.log("[Reports/install] fetching installations from:", API_BASE);
+    var res = await fetch(API_BASE);
+    console.log("[Reports/install] response status:", res.status);
+    if(!res.ok){ throw new Error("API returned "+res.status); }
+    var json = await res.json();
+    console.log("[Reports/install] response json:", json);
+
+    if(!json.items || json.items.length === 0){
+      console.warn("[Reports/install] empty items; installations cannot be listed yet");
+      return;
+    }
+    
+    var installations = [...new Set(json.items.map(r=>r.Installations).filter(Boolean))].sort();
+    console.log("[Reports/install] found installations:", installations);
+
+    var dd = document.getElementById('installationDropdown');
+    if(!dd){ console.warn("[Reports/install] installationDropdown missing in DOM"); return; }
+    dd.innerHTML = "";
+    installations.forEach(function(name){
+      var div=document.createElement('div');
+      div.textContent=name;
+      div.onclick=function(){ selectInstallation(name); };
+      dd.appendChild(div);
+    });
+
+    // Auto-select Site_A if available
+    if(installations.includes('Site_A')){
+      console.log("[Reports/install] auto select Site_A");
+      selectInstallation('Site_A');
+    } else if(installations.length > 0){
+      console.log("[Reports/install] Site_A not found, auto select first installation:", installations[0]);
+      selectInstallation(installations[0]);
+    } else {
+      console.log("[Reports/install] installations loaded, waiting for user selection");
+    }
+  }catch(err){
+    console.error("[Reports/install] loadInstallations failed:", err);
+  }
+}
+
+// Select an installation and rebuild sensor list under it
+async function selectInstallation(installation){
+  console.log("[Reports/install] selectInstallation:", installation);
+  const btnInstall = document.getElementById('btnInstall');
+  if (btnInstall) btnInstall.textContent = installation + " ▾";
+  var m=document.getElementById('installationDropdown');
+  if(m){ m.style.display='none'; }
   
-  // Also load sensors directly in case no installations are available
-  loadSensors();
+  // Enable sensor button after selecting installation
+  const btnSensor = document.getElementById('btnSensor');
+  if (btnSensor) {
+    btnSensor.disabled = false;
+    btnSensor.textContent = "Select Sensor ▾";
+    console.log("[selectInstallation] Sensor button enabled, disabled:", btnSensor.disabled);
+  } else {
+    console.warn("[selectInstallation] Sensor button not found");
+  }
+  
+  await loadSensorsForInstallation(installation);
+}
+
+// Filter sensors by selected installation and repopulate sensor dropdown
+async function loadSensorsForInstallation(installation){
+  try{
+    console.log("[Reports/install] loadSensorsForInstallation:", installation);
+    var res=await fetch(API_BASE);
+    console.log("[Reports/install] sensors fetch status:", res.status);
+    if(!res.ok){ throw new Error("API returned "+res.status); }
+    var json=await res.json();
+    console.log("[Reports/install] sensors json:", json);
+    if(!json.items || !json.items.length){ console.warn("[Reports/install] empty items"); return; }
+    var filtered = json.items.filter(r => r.Installations === installation);
+    var sensors = [...new Set(filtered.map(r => r.Sensor_id))].sort();
+    console.log("[Reports/install] sensors for installation", installation, sensors);
+
+    var dropdown=document.getElementById('sensorDropdown');
+    if(!dropdown){ console.warn("[Reports/install] sensorDropdown missing"); return; }
+    dropdown.innerHTML="";
+    sensors.forEach(function(id){
+      var div=document.createElement('div');
+      div.textContent=id;
+      div.onclick=function(){ selectSensor(id); };
+      dropdown.appendChild(div);
+    });
+
+    if(sensors.length>0){
+      console.log("[Reports/install] auto select first sensor:", sensors[0]);
+      selectSensor(sensors[0]);
+      const btnSensor = document.getElementById('btnSensor');
+      if (btnSensor) {
+        btnSensor.textContent = sensors[0] + " ▾";
+      }
+    }else{
+      console.warn("[Reports/install] no sensors under installation:", installation);
+      // Disable sensor button if no sensors found
+      const btnSensor = document.getElementById('btnSensor');
+      if (btnSensor) {
+        btnSensor.disabled = true;
+        btnSensor.textContent = "No Sensors Available";
+      }
+    }
+  }catch(err){
+    console.error("[Reports/install] loadSensorsForInstallation failed:", err);
+  }
 }
 
 window.onload=initializePage;
 </script>
 
-  <!-- NEW: Installation feature (non-destructive, full console logs) -->
+  <!-- Installation dropdown toggle function -->
   <script>
-    // Additional dropdown toggle for Installation
     function toggleInstallationMenu(){
       console.log("[Reports/install] toggleInstallationMenu() — toggling dropdown");
       var m=document.getElementById('installationDropdown');
@@ -634,7 +801,7 @@ window.onload=initializePage;
       console.log("[Reports/install] New display style:", m.style.display);
     }
 
-    // Hide installation dropdown when clicking outside (keeps original listeners intact)
+    // Hide installation dropdown when clicking outside
     document.addEventListener('click', function(e){
       var m=document.getElementById('installationDropdown');
       if(!m) return;
@@ -643,114 +810,10 @@ window.onload=initializePage;
       for(var i=0;i<btns.length;i++){ if(btns[i].contains(e.target)) { insideBtn=true; break; } }
       if(!insideBtn && !m.contains(e.target)){ m.style.display='none'; }
     });
-
-    // Load installations from same API and populate dropdown
-    async function loadInstallations(){
-      try{
-        console.log("[Reports/install] fetching installations from:", API_BASE);
-        var res = await fetch(API_BASE);
-        console.log("[Reports/install] response status:", res.status);
-        if(!res.ok){ throw new Error("API returned "+res.status); }
-        var json = await res.json();
-        console.log("[Reports/install] response json:", json);
-
-        if(!json.items || json.items.length === 0){
-          console.warn("[Reports/install] empty items; installations cannot be listed yet");
-          return;
-        }
-        
-        var namesMap = {};
-        for(var i=0;i<json.items.length;i++){
-          var it=json.items[i];
-          if(it && it.Installation){ namesMap[it.Installation]=true; }
-        }
-        var installations = Object.keys(namesMap);
-        console.log("[Reports/install] found installations:", installations);
-
-        var dd = document.getElementById('installationDropdown');
-        if(!dd){ console.warn("[Reports/install] installationDropdown missing in DOM"); return; }
-        dd.innerHTML = "";
-        installations.forEach(function(name){
-          var div=document.createElement('div');
-          div.textContent=name;
-          div.onclick=function(){ selectInstallation(name); };
-          dd.appendChild(div);
-        });
-
-        if(installations.length>0){
-          console.log("[Reports/install] auto select first installation:", installations[0]);
-          selectInstallation(installations[0]);
-        }
-      }catch(err){
-        console.error("[Reports/install] loadInstallations failed:", err);
-      }
-    }
-
-    // Select an installation and rebuild sensor list under it
-    async function selectInstallation(installation){
-    console.log("[Reports/install] selectInstallation:", installation);
-    const btnInstall = document.getElementById('btnInstall');
-    if (btnInstall) btnInstall.textContent = installation + " ▾";
-      var m=document.getElementById('installationDropdown');
-      if(m){ m.style.display='none'; }
-      
-      // Sensor button is now always enabled
-      // const btnSensor = document.getElementById('btnSensor');
-      // if (btnSensor) {
-      //   btnSensor.disabled = false;
-      //   btnSensor.textContent = "Select Sensor ▾";
-      // }
-      
-      await loadSensorsForInstallation(installation);
-    }
-
-    // Filter sensors by selected installation and repopulate sensor dropdown
-    async function loadSensorsForInstallation(installation){
-      try{
-        console.log("[Reports/install] loadSensorsForInstallation:", installation);
-        var res=await fetch(API_BASE);
-        console.log("[Reports/install] sensors fetch status:", res.status);
-        if(!res.ok){ throw new Error("API returned "+res.status); }
-        var json=await res.json();
-        console.log("[Reports/install] sensors json:", json);
-        if(!json.items || !json.items.length){ console.warn("[Reports/install] empty items"); return; }
-        var arr=[];
-        for(var i=0;i<json.items.length;i++){
-          var r=json.items[i];
-          if(r && r.Installation===installation && r.Sensor_id){ arr.push(r.Sensor_id); }
-        }
-        // unique
-        var seen={}; var sensors=[];
-        for(var j=0;j<arr.length;j++){ if(!seen[arr[j]]){ seen[arr[j]]=true; sensors.push(arr[j]); } }
-        console.log("[Reports/install] sensors for installation", installation, sensors);
-
-        var dropdown=document.getElementById('sensorDropdown');
-        if(!dropdown){ console.warn("[Reports/install] sensorDropdown missing"); return; }
-        dropdown.innerHTML="";
-        sensors.forEach(function(id){
-          var div=document.createElement('div');
-          div.textContent=id;
-          div.onclick=function(){ selectSensor(id); };
-          dropdown.appendChild(div);
-        });
-
-        if(sensors.length>0){
-        console.log("[Reports/install] auto select first sensor:", sensors[0]);
-        selectSensor(sensors[0]);
-        document.getElementById('btnSensor').textContent = sensors[0] + " ▾";
-        }else{
-          console.warn("[Reports/install] no sensors under installation:", installation);
-        }
-      }catch(err){
-        console.error("[Reports/install] loadSensorsForInstallation failed:", err);
-      }
-    }
-
-    // Installation loader is now called from initializePage()
   </script>
-  <!-- END NEW Installation feature -->
 </body>
 </html>
+
 
 
 

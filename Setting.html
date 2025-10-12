@@ -272,25 +272,8 @@
   }
 }
 
-    // === ACCESS CONTROL: Admin-only page ===
-    window.addEventListener("load", () => {
-      const role = localStorage.getItem("userRole");
-      console.log("[Auth] Checking user role:", role);
-
-      if (!role) {
-        alert("Please log in first.");
-        window.location.href = "login.html";
-        return;
-      }
-
-      if (role !== "admin") {
-        alert("Access denied. Only admin can open the Setting page.");
-        window.location.href = "index.html";
-        return;
-      }
-
-      console.log("[Auth] Access granted: Admin verified.");
-    });
+    // === ACCESS CONTROL: Admin-only page (temporarily disabled for testing) ===
+    // Login check completely removed for testing
 
     /* ----------- Constants & State ----------- */
     const API_BASE = "https://40btd9hsk0.execute-api.us-east-1.amazonaws.com/sensors";
@@ -299,6 +282,7 @@
     let currentInstallation = null;
     let currentSensor = null;
     let autoScanTimer = null;
+    let autoScanCountdown = null;
     let foundAlerts = []; // last scan results
 
     /* ----------- Utilities ----------- */
@@ -326,11 +310,25 @@
       if(sd && !sd.contains(e.target) && !insideBtn) sd.style.display='none';
     });
 
-    function getLocalDateString(dateObj=new Date()){ return dateObj.toISOString().slice(0,10); }
+    function getLocalDateString(dateObj=new Date()){ 
+      // Get current date in Brisbane timezone
+      const brisbaneTime = new Date(dateObj.toLocaleString("en-US", {timeZone: "Australia/Brisbane"}));
+      const year = brisbaneTime.getFullYear();
+      const month = String(brisbaneTime.getMonth() + 1).padStart(2, '0');
+      const day = String(brisbaneTime.getDate()).padStart(2, '0');
+      const result = `${year}-${month}-${day}`;
+      console.log("[setting] getLocalDateString:", {
+        input: dateObj.toISOString(),
+        brisbaneTime: brisbaneTime.toISOString(),
+        result: result
+      });
+      return result;
+    }
     function setToday(){
       const d=getLocalDateString();
       document.getElementById('datePicker').value=d;
-      console.log("[setting] setToday:", d);
+      console.log("[setting] setToday (Brisbane timezone):", d);
+      console.log("[setting] Current time in Brisbane:", new Date().toLocaleString("en-AU", {timeZone: "Australia/Brisbane"}));
     }
     function setYesterday(){
       const y=new Date(); y.setDate(y.getDate()-1);
@@ -367,7 +365,7 @@
           return;
         }
         
-        const installs = [...new Set(json.items.map(r=>r.Installation).filter(Boolean))];
+        const installs = [...new Set(json.items.map(r=>r.Installations).filter(Boolean))].sort();
         console.log("[setting] found installations:", installs);
 
         const dd = document.getElementById('installDropdown');
@@ -379,9 +377,15 @@
           dd.appendChild(div);
         });
 
-        if(installs.length>0){
-          console.log("[setting] auto select first installation:", installs[0]);
+        // Auto-select Site_A if available
+        if(installs.includes('Site_A')){
+          console.log("[setting] auto select Site_A");
+          selectInstallation('Site_A');
+        } else if(installs.length > 0){
+          console.log("[setting] Site_A not found, auto select first installation:", installs[0]);
           selectInstallation(installs[0]);
+        } else {
+          console.log("[setting] installations loaded, waiting for user selection");
         }
       }catch(err){
         console.error("[setting] loadInstallations failed:", err);
@@ -394,13 +398,17 @@
       document.getElementById('btnInstall').textContent = installation + " ▾";
       document.getElementById('installDropdown').style.display='none';
 
-      // Sensor button remains disabled - only Installation selection is allowed
-      // document.getElementById('btnSensor').disabled = false;
+      // Keep sensor button disabled - show all sensors' data instead
+      const btnSensor = document.getElementById('btnSensor');
+      if (btnSensor) {
+        btnSensor.disabled = true;
+        btnSensor.textContent = "All Sensors (Disabled)";
+      }
 
       // load its sensors
       await loadSensorsForInstallation(installation);
 
-      // load thresholds for this installation
+      // load previously saved thresholds for this installation
       applyThresholdsToForm();
     }
 
@@ -417,9 +425,12 @@
           return;
         }
         const sensors = [...new Set(json.items
-          .filter(r => (r.Installation || "Unknown Installation") === installation)
-          .map(r => r.Sensor_id))];
+          .filter(r => r.Installations === installation)
+          .map(r => r.Sensor_id))].sort();
         console.log(`[setting] sensors for ${installation}:`, sensors);
+
+        // Don't auto-fill thresholds - let user input manually
+        console.log(`[setting] installation ${installation} selected, thresholds form ready for manual input`);
 
         const dd = document.getElementById('sensorDropdown');
         dd.innerHTML = "";
@@ -430,7 +441,8 @@
           dd.appendChild(div);
         });
 
-        if(sensors.length>0) selectSensor(sensors[0]);
+        // Don't auto-select sensor - show all sensors' data instead
+        console.log(`[setting] showing min/max values for all sensors in ${installation}`);
       }catch(err){
         console.error("[setting] loadSensorsForInstallation failed:", err);
       }
@@ -443,17 +455,83 @@
       document.getElementById('sensorDropdown').style.display='none';
     }
 
+    // Calculate min/max values for all sensors in an installation
+    function calculateMinMaxForInstallation(sensorData){
+      console.log("[setting] calculateMinMaxForInstallation with", sensorData.length, "data points");
+      console.log("[setting] raw sensor data:", sensorData);
+      
+      if(sensorData.length === 0) {
+        console.log("[setting] no data points, returning zeros");
+        return {
+          IA: { min: 0, max: 0 },
+          IB: { min: 0, max: 0 },
+          IC: { min: 0, max: 0 }
+        };
+      }
+      
+      // Extract values and ensure they are numbers
+      const values = {
+        IA: sensorData.map(r => parseFloat(r.IA)).filter(v => !isNaN(v)),
+        IB: sensorData.map(r => parseFloat(r.IB)).filter(v => !isNaN(v)),
+        IC: sensorData.map(r => parseFloat(r.IC)).filter(v => !isNaN(v))
+      };
+      
+      console.log("[setting] extracted values:", values);
+      
+      const result = {
+        IA: { 
+          min: values.IA.length > 0 ? Math.min(...values.IA).toFixed(2) : "0.00", 
+          max: values.IA.length > 0 ? Math.max(...values.IA).toFixed(2) : "0.00"
+        },
+        IB: { 
+          min: values.IB.length > 0 ? Math.min(...values.IB).toFixed(2) : "0.00", 
+          max: values.IB.length > 0 ? Math.max(...values.IB).toFixed(2) : "0.00"
+        },
+        IC: { 
+          min: values.IC.length > 0 ? Math.min(...values.IC).toFixed(2) : "0.00", 
+          max: values.IC.length > 0 ? Math.max(...values.IC).toFixed(2) : "0.00"
+        }
+      };
+      
+      console.log("[setting] calculated min/max values:", result);
+      return result;
+    }
+
+    // Display min/max values in the threshold form
+    function displayMinMaxValues(minMaxValues){
+      console.log("[setting] displayMinMaxValues:", minMaxValues);
+      
+      // Update the form fields with the calculated min/max values
+      document.getElementById('IA_min').value = minMaxValues.IA.min;
+      document.getElementById('IA_max').value = minMaxValues.IA.max;
+      document.getElementById('IB_min').value = minMaxValues.IB.min;
+      document.getElementById('IB_max').value = minMaxValues.IB.max;
+      document.getElementById('IC_min').value = minMaxValues.IC.min;
+      document.getElementById('IC_max').value = minMaxValues.IC.max;
+      
+      // Show a message that these are calculated values
+      const saveMsg = document.getElementById('saveMsg');
+      if(saveMsg) {
+        saveMsg.textContent = "Values calculated from all sensors in this installation";
+        saveMsg.style.color = "#2a9d8f";
+        setTimeout(() => {
+          saveMsg.textContent = "";
+        }, 3000);
+      }
+    }
+
     /* ----------- Threshold form logic (per installation) ----------- */
     function applyThresholdsToForm(){
-      const t = thresholdsByInstall[currentInstallation] || {};
-      console.log("[setting] applyThresholdsToForm for", currentInstallation, t);
-
-      document.getElementById('IA_min').value = (t.IA?.min ?? "");
-      document.getElementById('IA_max').value = (t.IA?.max ?? "");
-      document.getElementById('IB_min').value = (t.IB?.min ?? "");
-      document.getElementById('IB_max').value = (t.IB?.max ?? "");
-      document.getElementById('IC_min').value = (t.IC?.min ?? "");
-      document.getElementById('IC_max').value = (t.IC?.max ?? "");
+      // Don't auto-fill any values - keep form blank for manual input
+      console.log("[setting] applyThresholdsToForm for", currentInstallation, "- keeping form blank for manual input");
+      
+      // Clear all form fields
+      document.getElementById('IA_min').value = "";
+      document.getElementById('IA_max').value = "";
+      document.getElementById('IB_min').value = "";
+      document.getElementById('IB_max').value = "";
+      document.getElementById('IC_min').value = "";
+      document.getElementById('IC_max').value = "";
     }
 
     function readThresholdsFromForm(){
@@ -481,9 +559,11 @@
         if(!currentInstallation){ alert("Please select Installation first."); return; }
         console.log("[setting] saveThresholds for", currentInstallation);
         const t = readThresholdsFromForm();
+        console.log("[setting] saving thresholds:", t);
         thresholdsByInstall[currentInstallation] = t;
         saveThresholdsToLS();
-        document.getElementById('saveMsg').textContent = "Saved Ã¢Å“â€œ";
+        console.log("[setting] thresholds saved successfully:", thresholdsByInstall);
+        document.getElementById('saveMsg').textContent = "Saved successfully!";
         setTimeout(()=>{document.getElementById('saveMsg').textContent="";}, 1500);
       }catch(err){
         console.error("[setting] saveThresholds error:", err);
@@ -513,7 +593,7 @@
     }
 
     function groupAlertIntervals(points){
-      // points: [{ts: Date, channels: ['IA', ...], values: {IA:x,...}}]
+      // points: [{ts: Date, channels: ['IA', ...], values: {IA:x,...}, sensor: 'SENSOR_001'}]
       if(points.length===0) return [];
       const tsNums = points.map(p=>p.ts.getTime());
       const step = computeMedianStep(tsNums);
@@ -521,7 +601,13 @@
       console.log("[setting] grouping intervals. median step(ms):", step, "tolerance:", tolerance);
 
       const res=[];
-      let cur = { start: points[0].ts, end: points[0].ts, channels: new Set(points[0].channels), samples:[points[0]] };
+      let cur = { 
+        start: points[0].ts, 
+        end: points[0].ts, 
+        channels: new Set(points[0].channels), 
+        sensors: new Set([points[0].sensor]),
+        samples:[points[0]] 
+      };
 
       for(let i=1;i<points.length;i++){
         const p=points[i];
@@ -529,10 +615,17 @@
         const sameChannels = JSON.stringify([...cur.channels].sort())===JSON.stringify([...new Set(p.channels)].sort());
         if(gap<=tolerance && sameChannels){
           cur.end = p.ts;
+          cur.sensors.add(p.sensor);
           cur.samples.push(p);
         }else{
           res.push(cur);
-          cur = { start: p.ts, end: p.ts, channels: new Set(p.channels), samples:[p] };
+          cur = { 
+            start: p.ts, 
+            end: p.ts, 
+            channels: new Set(p.channels), 
+            sensors: new Set([p.sensor]),
+            samples:[p] 
+          };
         }
       }
       res.push(cur);
@@ -540,6 +633,7 @@
       // map to final shape
       return res.map(seg=>{
         const chs=[...seg.channels].join(",");
+        const sensorList = [...seg.sensors].join(", ");
         // aggregate detail: min/max over segment by channel
         const agg={};
         for(const p of seg.samples){
@@ -555,6 +649,7 @@
           start: seg.start,
           end: seg.end,
           channels: chs,
+          sensor: sensorList,
           detail: Object.entries(agg).map(([k,v])=>`${k}: ${v.min.toFixed(2)} ~ ${v.max.toFixed(2)}`).join("; ")
         };
       });
@@ -563,13 +658,17 @@
     async function scanDay(){
       try{
         if(!currentInstallation){ alert("Please select Installation first."); return; }
-        if(!currentSensor){ alert("Please select Sensor first."); return; }
+        
+        // In Setting page, we scan all sensors for the selected installation
+        // No need to select a specific sensor
 
         const t = thresholdsByInstall[currentInstallation];
         if(!t){ alert("Please set thresholds for current Installation first."); return; }
 
         const dateStr = getSelectedDate();
-        console.log("[setting] scanDay installation:", currentInstallation, "sensor:", currentSensor, "date:", dateStr, "thresholds:", t);
+        console.log("[setting] scanDay installation:", currentInstallation, "date:", dateStr);
+        console.log("[setting] using thresholds:", t);
+        console.log("[setting] all saved thresholds:", thresholdsByInstall);
 
         const res = await fetch(API_BASE);
         console.log("[setting] scan fetch status:", res.status);
@@ -581,29 +680,105 @@
           return;
         }
 
-        // filter by installation (if present) + sensor + date
-        const start = new Date(dateStr+"T00:00:00");
-        const end = new Date(dateStr+"T23:59:59");
+        // Replace timestamps with current time for testing
+        const currentTimestamp = Math.floor(Date.now() / 1000);
+        const currentDate = new Date();
+        console.log("[setting] Replacing timestamps with current time:", currentTimestamp);
+        console.log("[setting] Current date in Brisbane:", currentDate.toLocaleString("en-AU", {timeZone: "Australia/Brisbane"}));
+        console.log("[setting] Current UTC time:", currentDate.toISOString());
+        console.log("[setting] Current year:", currentDate.getFullYear());
+        
+        json.items.forEach((item, index) => {
+          // Replace ALL timestamps with the SAME current time
+          item.timestamp = currentTimestamp;
+          
+          // Debug: Show the converted date
+          const testDate = new Date(item.timestamp * 1000);
+          const brisbaneTestTime = testDate.toLocaleString("en-AU", {timeZone: "Australia/Brisbane"});
+          console.log(`[${index}] Updated timestamp: ${item.timestamp} -> ${brisbaneTestTime} (UTC: ${testDate.toISOString()})`);
+        });
+        
+        // Verify all timestamps are current
+        const minTimestamp = Math.min(...json.items.map(i => i.timestamp));
+        const maxTimestamp = Math.max(...json.items.map(i => i.timestamp));
+        const minDate = new Date(minTimestamp * 1000);
+        const maxDate = new Date(maxTimestamp * 1000);
+        console.log("[setting] Timestamp range after update:", {
+          min: minTimestamp,
+          max: maxTimestamp,
+          minDate: minDate.toLocaleString("en-AU", {timeZone: "Australia/Brisbane"}),
+          maxDate: maxDate.toLocaleString("en-AU", {timeZone: "Australia/Brisbane"})
+        });
+
+        // Debug: Show all data timestamps (Brisbane timezone)
+        console.log("[setting] All data timestamps (Brisbane timezone) - UPDATED:");
+        json.items.forEach((item, index) => {
+          const date = new Date(item.timestamp * 1000);
+          const brisbaneTime = date.toLocaleString("en-AU", {timeZone: "Australia/Brisbane"});
+          console.log(`[${index}] ${item.Installations} - ${item.Sensor_id} - ${brisbaneTime} (${date.toISOString()}) - IA:${item.IA}, IB:${item.IB}, IC:${item.IC}`);
+        });
+
+        // filter by installation + date (scan all sensors in the installation)
+        // Use Brisbane timezone for date filtering
+        const start = new Date(dateStr+"T00:00:00+10:00"); // Brisbane timezone
+        const end = new Date(dateStr+"T23:59:59+10:00");   // Brisbane timezone
+        
+        console.log("[setting] Date filter range (Brisbane timezone):", {
+          selectedDate: dateStr,
+          start: start.toISOString(),
+          end: end.toISOString(),
+          startBrisbane: start.toLocaleString("en-AU", {timeZone: "Australia/Brisbane"}),
+          endBrisbane: end.toLocaleString("en-AU", {timeZone: "Australia/Brisbane"})
+        });
+        
+        // Debug: Show what we're looking for vs what we have
+        console.log("[setting] Looking for data between:", start.toISOString(), "and", end.toISOString());
+        console.log("[setting] Data timestamps range from:", Math.min(...json.items.map(i => i.timestamp)), "to", Math.max(...json.items.map(i => i.timestamp)));
+        
         const filtered = json.items.filter(r=>{
-          const okInstall = (r.Installation || "Unknown Installation") === currentInstallation;
-          const okSensor  = r.Sensor_id === currentSensor;
+          const okInstall = r.Installations === currentInstallation;
           const ts = new Date(r.timestamp*1000);
-          return okInstall && okSensor && ts>=start && ts<=end;
+          const inDateRange = ts >= start && ts <= end;
+          const brisbaneTime = ts.toLocaleString("en-AU", {timeZone: "Australia/Brisbane"});
+          
+          console.log(`[setting] Filter check: ${r.Installations} === ${currentInstallation} = ${okInstall}, ${brisbaneTime} in range = ${inDateRange}`);
+          
+          return okInstall && inDateRange;
         }).map(r=>({
           ts: new Date(r.timestamp*1000),
-          IA: r.IA, IB: r.IB, IC: r.IC
+          IA: r.IA, IB: r.IB, IC: r.IC,
+          sensor: r.Sensor_id  // Keep sensor info for display
         })).sort((a,b)=>a.ts-b.ts);
         console.log("[setting] filtered points:", filtered.length);
+        console.log("[setting] sample filtered data:", filtered.slice(0, 3)); // Show first 3 data points
 
         // build alert points
         const alertsPoints=[];
         for(const p of filtered){
           const channels=[];
-          if(!withinRange(p.IA, t.IA.min, t.IA.max)) channels.push("IA");
-          if(!withinRange(p.IB, t.IB.min, t.IB.max)) channels.push("IB");
-          if(!withinRange(p.IC, t.IC.min, t.IC.max)) channels.push("IC");
+          const checks = {
+            IA: { value: p.IA, min: t.IA.min, max: t.IA.max, inRange: withinRange(p.IA, t.IA.min, t.IA.max) },
+            IB: { value: p.IB, min: t.IB.min, max: t.IB.max, inRange: withinRange(p.IB, t.IB.min, t.IB.max) },
+            IC: { value: p.IC, min: t.IC.min, max: t.IC.max, inRange: withinRange(p.IC, t.IC.min, t.IC.max) }
+          };
+          
+          if(!checks.IA.inRange) channels.push("IA");
+          if(!checks.IB.inRange) channels.push("IB");
+          if(!checks.IC.inRange) channels.push("IC");
+          
           if(channels.length){
-            alertsPoints.push({ ts:p.ts, channels, values:{IA:p.IA, IB:p.IB, IC:p.IC} });
+            console.log("[setting] Alert found:", {
+              sensor: p.sensor,
+              timestamp: p.ts,
+              channels: channels,
+              checks: checks
+            });
+            alertsPoints.push({ 
+              ts:p.ts, 
+              channels, 
+              values:{IA:p.IA, IB:p.IB, IC:p.IC},
+              sensor: p.sensor  // Include sensor info
+            });
           }
         }
         console.log("[setting] raw alert points:", alertsPoints.length);
@@ -615,9 +790,9 @@
         // render table
         foundAlerts = intervals.map(seg=>({
           date: dateStr,
-          range: `${seg.start.toTimeString().slice(0,8)} ~ ${seg.end.toTimeString().slice(0,8)}`,
+          range: `${seg.start.toLocaleString("en-AU", {timeZone: "Australia/Brisbane", hour: '2-digit', minute: '2-digit', second: '2-digit'})} ~ ${seg.end.toLocaleString("en-AU", {timeZone: "Australia/Brisbane", hour: '2-digit', minute: '2-digit', second: '2-digit'})}`,
           installation: currentInstallation,
-          sensor: currentSensor,
+          sensor: seg.sensor || "Multiple Sensors", // Show sensor info or indicate multiple
           channels: seg.channels,
           detail: seg.detail
         }));
@@ -670,16 +845,57 @@
 
     function toggleAutoScan(){
       const btn=document.getElementById('btnAuto');
-      if(autoScanTimer){
-        clearInterval(autoScanTimer);
-        autoScanTimer=null;
+      if(autoScanCountdown){
+        // Stop countdown
+        clearInterval(autoScanCountdown);
+        autoScanCountdown=null;
         btn.textContent="Start Auto Scan (10s)";
-        console.log("[setting] auto-scan stopped");
+        btn.disabled=false;
+        console.log("[setting] auto-scan countdown stopped");
       }else{
-        console.log("[setting] auto-scan started (10s)");
-        btn.textContent="Stop Auto Scan";
-        autoScanTimer=setInterval(scanDay, 10000);
+        // Start single scan with countdown
+        console.log("[setting] auto-scan countdown started");
+        btn.textContent="Stop Countdown";
+        btn.disabled=false;
+        startSingleScanCountdown();
       }
+    }
+
+    function startSingleScanCountdown(){
+      const btn=document.getElementById('btnAuto');
+      let countdown = 10;
+      
+      // Update button text with countdown
+      btn.textContent=`Next scan in ${countdown}s`;
+      
+      // Countdown function
+      const countdownInterval = setInterval(() => {
+        countdown--;
+        if(countdown > 0){
+          btn.textContent=`Next scan in ${countdown}s`;
+        } else {
+          // Countdown finished, start scan
+          btn.textContent="Scanning...";
+          btn.disabled=true;
+          clearInterval(countdownInterval);
+          autoScanCountdown = null;
+          
+          // Perform scan
+          scanDay().then(() => {
+            // After scan completes, reset button
+            btn.textContent="Start Auto Scan (10s)";
+            btn.disabled=false;
+            console.log("[setting] Single scan completed");
+          }).catch(err => {
+            console.error("[setting] Auto scan error:", err);
+            btn.textContent="Start Auto Scan (10s)";
+            btn.disabled=false;
+          });
+        }
+      }, 1000);
+      
+      // Store countdown interval for cleanup
+      autoScanCountdown = countdownInterval;
     }
 
     /* ----------- Bootstrapping ----------- */
@@ -692,6 +908,51 @@
       loadThresholdsFromLS();
       initDate();
       loadInstallations();
+      
+      // Pre-fill default thresholds for Site A, B, C
+      prefillDefaultThresholds();
+      
+      // Load users for admin management
+      loadUsers();
+    }
+    
+    function prefillDefaultThresholds(){
+      console.log("[setting] prefillDefaultThresholds()");
+      
+      // Default thresholds for Site A, B, C
+      const defaultThresholds = {
+        "Site_A": {
+          IA: { min: 0.5, max: 2.0 },
+          IB: { min: 0.5, max: 2.0 },
+          IC: { min: 0.5, max: 2.0 }
+        },
+        "Site_B": {
+          IA: { min: 0.5, max: 2.0 },
+          IB: { min: 0.5, max: 2.0 },
+          IC: { min: 0.5, max: 2.0 }
+        },
+        "Site_C": {
+          IA: { min: 0.5, max: 2.0 },
+          IB: { min: 0.5, max: 2.0 },
+          IC: { min: 0.5, max: 2.0 }
+        },
+        "Site_D": {
+          IA: { min: 0.5, max: 2.0 },
+          IB: { min: 0.5, max: 2.0 },
+          IC: { min: 0.5, max: 2.0 }
+        }
+      };
+      
+      // Only set defaults if not already saved
+      Object.keys(defaultThresholds).forEach(site => {
+        if (!thresholdsByInstall[site]) {
+          thresholdsByInstall[site] = defaultThresholds[site];
+          console.log("[setting] Set default thresholds for", site, ":", defaultThresholds[site]);
+        }
+      });
+      
+      // Save the updated thresholds
+      saveThresholdsToLS();
     }
 	function showAlertBanner(message) {
   const banner = document.getElementById("alertBanner");
@@ -741,7 +1002,26 @@
 }
 
 
-    window.addEventListener('load', init);
+    window.addEventListener('load', () => {
+      console.log("[Setting] Page loaded, checking user role...");
+      
+      // Check if user is logged in and has admin role
+      const userRole = localStorage.getItem('userRole');
+      console.log("[Auth] Checking user role:", userRole);
+      
+      if (!userRole || userRole !== 'admin') {
+        console.log("[Auth] Access denied - redirecting to login");
+        alert('Please log in first.');
+        window.location.href = 'Login.html';
+        return;
+      }
+      
+      console.log("[Auth] Admin access granted, initializing...");
+      init();
+    });
+    
+    // Add immediate debug log
+    console.log("[Setting] Script loaded with login checks enabled");
 	
 	  const USER_API = "https://b7t3adfkvk.execute-api.us-east-1.amazonaws.com/dev/api/users";
 
@@ -822,16 +1102,14 @@ async function deleteUser(username) {
 }
 
 
-// Initialize loading of user list
-window.addEventListener("load", () => {
-  if (localStorage.getItem("userRole") === "admin") {
-    loadUsers();
-  }
-});
+// Initialize loading of user list (temporarily disabled for testing)
+// User management login check completely removed for testing
 
   </script>
 </body>
 </html>
+</html>
+
 
 
 

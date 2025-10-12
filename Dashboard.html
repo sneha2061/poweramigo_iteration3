@@ -134,17 +134,14 @@ button.secondary:hover {
 
       <!-- EW: Installation dropdown (same style as sensor) -->
       <div class="sensor-dropdown">
-        <button class="sensor-toggle-btn" onclick="toggleInstallationMenu()">Select Installation ▾</button>
+        <button id="btnInstall" class="sensor-toggle-btn" onclick="toggleInstallationMenu()">Select Installation ▾</button>
         <div id="installationDropdown" class="dropdown-menu"></div>
       </div>
       <!-- END NEW BLOCK -->
 
       <div class="sensor-dropdown">
-        <button class="sensor-toggle-btn" onclick="toggleSensorMenu()">Select Sensor ▾</button>
-        <div id="sensorDropdown" class="dropdown-menu">
-          <div onclick="selectSensor('SENSOR_001')">Sensor A</div>
-          <div onclick="selectSensor('SENSOR_002')">Sensor B</div>
-        </div>
+        <button id="btnSensor" class="sensor-toggle-btn" onclick="toggleSensorMenu()" disabled>Select Sensor ▾</button>
+        <div id="sensorDropdown" class="dropdown-menu"></div>
       </div>
       <div>
         <label for="datePicker"><strong>Select Day:</strong></label>
@@ -250,7 +247,64 @@ async function submitChangePassword() {
     /* --- Utility functions --- */
     function getLocalDateString(dateObj=new Date()) { return dateObj.toISOString().slice(0,10); }
     function toggleSearch(){const o=document.getElementById("searchOverlay");o.style.display=(o.style.display==="block")?"none":"block";}
-    function toggleSensorMenu(){const m=document.getElementById('sensorDropdown');m.style.display=(m.style.display==='block')?'none':'block';}
+    function toggleSensorMenu(){
+      console.log("[toggleSensorMenu] called");
+      
+      // Get the currently selected installation
+      const btnInstall = document.getElementById('btnInstall');
+      const currentInstallation = btnInstall ? btnInstall.textContent.replace(' ▾', '') : null;
+      console.log("[toggleSensorMenu] current installation:", currentInstallation);
+      
+      // Get sensors for the current installation
+      let sensors = [];
+      if (currentInstallation && currentInstallation !== 'Select Installation') {
+        // Fetch sensors for the current installation
+        fetch(API_BASE)
+          .then(res => res.json())
+          .then(json => {
+            if (json.items && json.items.length > 0) {
+              const filtered = json.items.filter(r => r.Installations === currentInstallation);
+              sensors = [...new Set(filtered.map(r => r.Sensor_id))].sort();
+              console.log("[toggleSensorMenu] sensors for installation", currentInstallation, ":", sensors);
+              
+              // Show sensor selection
+              showSensorSelection(sensors);
+            }
+          })
+          .catch(err => {
+            console.error("[toggleSensorMenu] failed to fetch sensors:", err);
+            showSensorSelection(['SENSOR_001', 'SENSOR_002', 'SENSOR_003']);
+          });
+      } else {
+        console.log("[toggleSensorMenu] no installation selected");
+        showSensorSelection(['SENSOR_001', 'SENSOR_002', 'SENSOR_003']);
+      }
+      
+      function showSensorSelection(sensors) {
+        // Create dropdown in the same style as installation dropdown
+        const sensorDropdown = document.getElementById('sensorDropdown');
+        
+        // Clear existing content
+        sensorDropdown.innerHTML = '';
+        
+        // Add sensor options
+        sensors.forEach(sensor => {
+          const div = document.createElement('div');
+          div.textContent = sensor;
+          div.onclick = () => {
+            selectSensor(sensor);
+            sensorDropdown.style.display = 'none';
+          };
+          sensorDropdown.appendChild(div);
+        });
+        
+        // Show the dropdown
+        sensorDropdown.style.display = 'block';
+        
+        console.log("[toggleSensorMenu] dropdown created with sensors:", sensors);
+      }
+      
+    }
 
     /* NEW: toggle installation menu (non-destructive) */
     function toggleInstallationMenu(){
@@ -379,7 +433,10 @@ async function submitChangePassword() {
       console.log("[selectSensor] selecting sensor:", sensor);
       currentSensor=sensor;
 
-      document.querySelectorAll('.sensor-toggle-btn')[1].textContent = sensor + ' ▾'; // keep first for installation
+      const btnSensor = document.getElementById('btnSensor');
+      if (btnSensor) {
+        btnSensor.textContent = sensor + ' ▾';
+      }
       document.getElementById('sensorDropdown').style.display='none';
 
       const latest=await fetchLatestData(currentSensor);
@@ -512,11 +569,8 @@ async function submitChangePassword() {
           dropdown.appendChild(div);
         });
 
-        if(sensors.length > 0){
-          console.log("[loadSensors] auto select first sensor:", sensors[0]);
-          selectSensor(sensors[0]);
-          document.querySelectorAll('.sensor-toggle-btn')[1].textContent = sensors[0] + ' ▾';
-        }
+        // Don't auto-select sensor - user must select installation first
+        console.log("[loadSensors] sensors loaded, waiting for installation selection");
       }catch(e){
         console.error("[loadSensors] Failed to load sensors",e);
         alert("Error loading sensors, check console.");
@@ -524,7 +578,8 @@ async function submitChangePassword() {
     }
 
     /* --- Initialize page (original) --- */
-    window.onload = loadSensors;
+    // Don't load sensors automatically - wait for installation selection
+    // window.onload = loadSensors;
 
     /* --- Real-time data updater --- */
     setInterval(async ()=>{
@@ -562,7 +617,7 @@ async function submitChangePassword() {
           console.warn("[install] empty items; installations cannot be listed yet");
           return;
         }
-        const installations=[...new Set(json.items.map(r=>r.Installation).filter(Boolean))];
+        const installations=[...new Set(json.items.map(r=>r.Installations).filter(Boolean))].sort();
         console.log("[install] found installations:", installations);
 
         const dropdown=document.getElementById('installationDropdown');
@@ -586,9 +641,24 @@ async function submitChangePassword() {
     // When an installation is selected, rebuild sensor list to only its sensors
     async function selectInstallation(installation){
       console.log("[install] selectInstallation:", installation);
-      // update the first green button text (installation button)
-      document.querySelectorAll('.sensor-toggle-btn')[0].textContent = installation + ' ▾';
+      // update the installation button text
+      const btnInstall = document.getElementById('btnInstall');
+      if (btnInstall) {
+        btnInstall.textContent = installation + ' ▾';
+      }
       document.getElementById('installationDropdown').style.display='none';
+      
+      // Enable sensor button after selecting installation
+      const btnSensor = document.getElementById('btnSensor');
+      if (btnSensor) {
+        console.log("[selectInstallation] enabling sensor button");
+        btnSensor.disabled = false;
+        btnSensor.textContent = "Select Sensor ▾";
+        console.log("[selectInstallation] sensor button disabled:", btnSensor.disabled);
+      } else {
+        console.warn("[selectInstallation] sensor button not found");
+      }
+      
       await loadSensorsForInstallation(installation);
     }
 
@@ -605,25 +675,44 @@ async function submitChangePassword() {
           console.warn("[install] no items to filter sensors by installation");
           return;
         }
-        const filtered=json.items.filter(r=>r.Installation===installation);
-        const sensors=[...new Set(filtered.map(r=>r.Sensor_id))];
+        const filtered=json.items.filter(r=>r.Installations===installation);
+        const sensors=[...new Set(filtered.map(r=>r.Sensor_id))].sort();
         console.log(`[install] sensors for installation ${installation}:`, sensors);
 
         const dropdown=document.getElementById('sensorDropdown');
+        if(!dropdown) {
+          console.error("[install] sensorDropdown element not found");
+          return;
+        }
         dropdown.innerHTML="";
+        console.log("[install] creating sensor options for:", sensors);
+        console.log("[install] dropdown element before adding options:", dropdown);
+        console.log("[install] dropdown innerHTML before adding options:", dropdown.innerHTML);
         sensors.forEach(id=>{
           const div=document.createElement('div');
           div.textContent=id;
           div.onclick=()=>selectSensor(id);
           dropdown.appendChild(div);
+          console.log("[install] added sensor option:", id, "dropdown children count:", dropdown.children.length);
         });
+        console.log("[install] total sensor options created:", dropdown.children.length);
+        console.log("[install] dropdown innerHTML after adding options:", dropdown.innerHTML);
 
         if(sensors.length>0){
           console.log("[install] auto select first sensor in installation:", sensors[0]);
           selectSensor(sensors[0]);
-          document.querySelectorAll('.sensor-toggle-btn')[1].textContent = sensors[0] + ' ▾';
+          const btnSensor = document.getElementById('btnSensor');
+          if (btnSensor) {
+            btnSensor.textContent = sensors[0] + ' ▾';
+          }
         }else{
           console.warn("[install] no sensors under installation:", installation);
+          // Disable sensor button if no sensors found
+          const btnSensor = document.getElementById('btnSensor');
+          if (btnSensor) {
+            btnSensor.disabled = true;
+            btnSensor.textContent = "No Sensors Available";
+          }
         }
       }catch(err){
         console.error("[install] loadSensorsForInstallation failed:", err);
@@ -706,6 +795,7 @@ window.addEventListener('load', loadThresholdsFromLS);
 
 </body>
 </html>
+
 
 
 
